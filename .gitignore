@@ -1,0 +1,28 @@
+# Build output
+build/
+out/
+*.o
+*.a
+*.elf
+*.hex
+*.bin
+*.map
+
+# IDE / tooling
+.vscode/
+.idea/
+.settings/
+*.user
+*.launch
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CTestTestfile.cmake
+Testing/
+
+# Misc
+*.swp
+*.swo
+*~
