@@ -195,10 +195,8 @@ typedef struct MFRC522_Config
     uint32_t timeout_ms;         /**< Default blocking-operation timeout.      */
     uint32_t reset_wait_ms;      /**< Delay after hard/soft reset.             */
     uint32_t antenna_settle_us;  /**< Antenna settling time.                   */
-    uint8_t  spi_speed;          /**< MFRC522_SpiSpeed_t index.                */
-    uint8_t  uart_baud;          /**< MFRC522_UartBaud_t index.                */
     uint8_t  irq_enabled;        /**< 1 = enable IRQ-based flow where supported.*/
-    uint8_t  reserved;           /**< Reserved for alignment.                  */
+    uint8_t  reserved[3];        /**< Reserved for alignment.                  */
 } MFRC522_Config_t;
 
 /* ================================================================== */

@@ -19,9 +19,9 @@ The project is delivered in phases:
 | Phase | Content | Status |
 |-------|---------|:------:|
 | 1 | Architecture + API design + file structure | ✅ done |
-| 2 | Register driver + transport layer | ⏳ next |
-| 3 | SPI / I²C / UART transports | ⏳ |
-| 4 | ISO/IEC 14443-A protocol | ⏳ |
+| 2 | Register driver + transport layer | ✅ done |
+| 3 | SPI / I²C / UART transports | ✅ done |
+| 4 | ISO/IEC 14443-A protocol | ⏳ next |
 | 5 | MIFARE layer | ⏳ |
 | 6 | STM32H743 HAL adapter | ⏳ |
 | 7 | Examples | ⏳ |
@@ -98,9 +98,25 @@ CMakeLists.txt           Build definition
 
 - [Architecture](docs/architecture.md) — layering, abstractions, threading, MISRA
 - [API reference](docs/api.md) — full function contracts
-- (per-interface docs and wiring tables land in later phases: `spi.md`,
-  `i2c.md`, `uart.md`, `mifare.md`, `stm32h743.md`, `register_map.md`,
-  `troubleshooting.md`)
+- [Register map](docs/register_map.md) — datasheet-accurate register/bit reference
+- [SPI interface](docs/spi.md) — framing, timing, wiring
+- [I2C interface](docs/i2c.md) — addressing (ADR/EA), framing, recovery
+- [UART interface](docs/uart.md) — LSB-first framing, baud table, limitations
+- (still to come: `mifare.md`, `stm32h743.md`, `troubleshooting.md`)
+
+## Host-side tests
+
+The core library compiles and runs on a host (no hardware needed) using a
+mocked MFRC522 register file:
+
+```sh
+cc -std=c99 -Wall -Wextra -Iinclude \
+   tests/test_transport.c src/mfrc522.c src/mfrc522_registers.c src/mfrc522_crc.c \
+   interface/mfrc522_spi.c interface/mfrc522_i2c.c interface/mfrc522_uart.c \
+   -o test_transport && ./test_transport
+```
+
+or via CMake: `cmake -S . -B build -DMFRC522_BUILD_TESTS=ON && cmake --build build && ctest --test-dir build`.
 
 ---
 

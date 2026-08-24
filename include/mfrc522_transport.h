@@ -32,6 +32,9 @@
 extern "C" {
 #endif
 
+/** Forward declaration of the reader handle (defined in mfrc522.h). */
+typedef struct MFRC522_Handle MFRC522_Handle_t;
+
 /* ================================================================== */
 /*  Platform (MCU hardware abstraction)                              */
 /* ================================================================== */
@@ -64,6 +67,23 @@ typedef struct MFRC522_PlatformOps
     MFRC522_Status_t (*receive)(void *ctx, uint8_t *rx, uint32_t len);
     MFRC522_Status_t (*transmit_receive)(void *ctx, const uint8_t *tx,
                                          uint8_t *rx, uint32_t len);
+
+    /**
+     * @brief Combined "write register address, then read data" access.
+     *
+     * This is the natural memory-mapped read of the I2C host interface
+     * (device address + register address, repeated start, read). The I2C
+     * transport uses it for register reads; SPI/UART adapters set it to NULL
+     * because they express reads through transmit/receive.
+     *
+     * @param tx      Register address byte(s) — for I2C, a single byte.
+     * @param tx_len  Number of address bytes.
+     * @param rx      Receive buffer.
+     * @param rx_len  Number of bytes to read.
+     */
+    MFRC522_Status_t (*write_read)(void *ctx, const uint8_t *tx,
+                                   uint32_t tx_len, uint8_t *rx,
+                                   uint32_t rx_len);
 
     /* ---- optional locking (NULL = single-threaded) --------------- */
     void      (*lock)(void *ctx);                    /**< Take the bus lock.      */
@@ -139,6 +159,16 @@ extern const MFRC522_TransportOps_t MFRC522_I2C_TransportOps;
 #if MFRC522_ENABLE_UART
 /** UART transport ops table (implemented in interface/mfrc522_uart.c). */
 extern const MFRC522_TransportOps_t MFRC522_UART_TransportOps;
+
+/**
+ * @brief Write the SerialSpeedReg (0x1F) with the baud divisor that matches
+ *        the handle's configured UART baud rate.
+ *
+ * Called by MFRC522_Init() when the UART host interface is selected. Also
+ * useful to change the baud rate at runtime (after which the MCU UART must be
+ * reconfigured to match).
+ */
+MFRC522_Status_t MFRC522_UART_ApplyBaud(MFRC522_Handle_t *handle);
 #endif
 
 #ifdef __cplusplus

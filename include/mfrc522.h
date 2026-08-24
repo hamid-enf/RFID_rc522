@@ -32,6 +32,16 @@ extern "C" {
 #endif
 
 /* ================================================================== */
+/*  IRQ callback type (forward: used by the runtime state)           */
+/* ================================================================== */
+
+#if MFRC522_ENABLE_IRQ
+/** IRQ callback signature (called from MFRC522_ProcessIRQ). */
+typedef void (*MFRC522_IrqCallback_t)(MFRC522_Handle_t *handle,
+                                      uint8_t irq_source, void *user);
+#endif
+
+/* ================================================================== */
 /*  Runtime state                                                    */
 /* ================================================================== */
 
@@ -71,6 +81,10 @@ typedef struct MFRC522_State
     uint8_t  flags;              /**< MFRC522_FLAG_* bits.             */
     uint8_t  reserved[2];
     MFRC522_Status_t last_error; /**< Last error code (for diagnostics). */
+#if MFRC522_ENABLE_IRQ
+    MFRC522_IrqCallback_t irq_callback; /**< Registered IRQ callback.   */
+    void                 *irq_user;     /**< Callback user context.     */
+#endif
 #if MFRC522_ENABLE_NONBLOCKING
     MFRC522_AsyncState_t async;  /**< Non-blocking state machine.      */
 #endif
@@ -240,10 +254,6 @@ uint8_t MFRC522_IsOperationComplete(const MFRC522_Handle_t *handle,
 /* ================================================================== */
 
 #if MFRC522_ENABLE_IRQ
-/** IRQ callback signature (called from MFRC522_ProcessIRQ). */
-typedef void (*MFRC522_IrqCallback_t)(MFRC522_Handle_t *handle,
-                                      uint8_t irq_source, void *user);
-
 /**
  * @brief Register an application callback for reader interrupts.
  */
@@ -252,9 +262,12 @@ MFRC522_Status_t MFRC522_AttachIRQCallback(MFRC522_Handle_t *handle,
                                            void *user);
 
 /**
- * @brief Service pending reader interrupts. Reads ComIrqReg and dispatches
- *        to the registered callback. Call from the GPIO EXTI handler (or
- *        polled from the main loop).
+ * @brief Service pending reader interrupts. Reads ComIrqReg, clears the
+ *        latched bits and dispatches to the registered callback with a
+ *        bit-mask of the pending sources.
+ *
+ * Call from the GPIO EXTI handler (via the platform adapter) or poll it from
+ * the main loop.
  */
 MFRC522_Status_t MFRC522_ProcessIRQ(MFRC522_Handle_t *handle);
 #endif

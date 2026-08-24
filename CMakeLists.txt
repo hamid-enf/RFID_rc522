@@ -18,13 +18,14 @@ project(mfrc522 C)
 add_library(mfrc522_core STATIC
     src/mfrc522.c
     src/mfrc522_registers.c
-    src/mfrc522_protocol.c
-    src/mfrc522_mifare.c
     src/mfrc522_crc.c
     src/mfrc522_irq.c
     interface/mfrc522_spi.c
     interface/mfrc522_i2c.c
     interface/mfrc522_uart.c
+    # (added in later phases:)
+    # src/mfrc522_protocol.c   # Phase 4 — ISO/IEC 14443-A
+    # src/mfrc522_mifare.c     # Phase 5 — MIFARE layer
 )
 
 target_include_directories(mfrc522_core PUBLIC
