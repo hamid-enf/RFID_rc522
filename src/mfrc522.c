@@ -61,6 +61,24 @@ const char *MFRC522_StatusToString(MFRC522_Status_t status)
     return MFRC522_STATUS_STRINGS[status];
 }
 
+static const char *const MFRC522_CARD_TYPE_STRINGS[MFRC522_CARD_COUNT] = {
+    "UNKNOWN",
+    "MIFARE Mini",
+    "MIFARE 1K",
+    "MIFARE 4K",
+    "MIFARE Ultralight",
+    "MIFARE Ultralight C",
+    "ISO/IEC 14443-4"
+};
+
+const char *MFRC522_CardTypeToString(MFRC522_CardType_t type)
+{
+    if (((int)type < 0) || (type >= MFRC522_CARD_COUNT)) {
+        return "UNKNOWN";
+    }
+    return MFRC522_CARD_TYPE_STRINGS[type];
+}
+
 MFRC522_Status_t MFRC522_GetLastError(const MFRC522_Handle_t *handle)
 {
     if (handle == NULL) {

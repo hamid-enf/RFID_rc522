@@ -56,6 +56,7 @@ extern CoreDebug_Type mfrc522_stub_coredebug;
 #define CoreDebug_DEMCR_TRCENA_Msk (0x01000000UL)
 
 /* ---- HAL functions used by the adapter --------------------------- */
+HAL_StatusTypeDef HAL_Init(void);
 HAL_StatusTypeDef HAL_SPI_Transmit(SPI_HandleTypeDef *h, uint8_t *pData,
                                    uint16_t Size, uint32_t Timeout);
 HAL_StatusTypeDef HAL_SPI_Receive(SPI_HandleTypeDef *h, uint8_t *pData,

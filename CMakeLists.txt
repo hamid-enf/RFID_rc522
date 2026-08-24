@@ -32,8 +32,9 @@ target_include_directories(mfrc522_core PUBLIC
 )
 
 target_compile_definitions(mfrc522_core PUBLIC
-    # Feature toggles are off-by-default in code; enable here if desired:
-    # MFRC522_ENABLE_NONBLOCKING=1
+    # Feature toggles (SPI/I2C/UART/IRQ/MIFARE are on by default; DEBUG is off).
+    # Override in mfrc522_config.h or via -D flags, e.g.:
+    # MFRC522_ENABLE_DEBUG=1
 )
 
 # C99, extra warnings (helps keep the code MISRA-C-lean)

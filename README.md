@@ -14,8 +14,6 @@ interfaces.
 
 ## Status / roadmap
 
-The project is delivered in phases:
-
 | Phase | Content | Status |
 |-------|---------|:------:|
 | 1 | Architecture + API design + file structure | ✅ done |
@@ -24,8 +22,8 @@ The project is delivered in phases:
 | 4 | ISO/IEC 14443-A protocol | ✅ done |
 | 5 | MIFARE layer | ✅ done |
 | 6 | STM32H743 HAL adapter | ✅ done |
-| 7 | Examples | ⏳ next |
-| 8 | Tests + docs + optimization | ⏳ |
+| 7 | Examples (15 programs) | ✅ done |
+| 8 | Tests + docs + capability matrix | ✅ done |
 
 ---
 
@@ -86,9 +84,9 @@ include/                 Public headers (core is hardware-independent)
 interface/               Host-interface transports (SPI / I2C / UART framing)
 platform/stm32/          STM32 HAL adapters (the only place HAL_* is used)
 src/                     Core implementation
-examples/                Example programs (basic, uid, mifare, spi, i2c, uart, stm32h743)
+examples/                15 example programs (+ common/ console helper)
 docs/                    Architecture, API, register map, interface & wiring docs
-tests/                   Unit / host-side tests
+tests/                   Host-side tests (+ minimal HAL stub)
 CMakeLists.txt           Build definition
 ```
 
@@ -104,21 +102,34 @@ CMakeLists.txt           Build definition
 - [UART interface](docs/uart.md) — LSB-first framing, baud table, limitations
 - [MIFARE support](docs/mifare.md) — auth, blocks, sectors, value blocks, limits
 - [STM32H743 setup](docs/stm32h743.md) — CubeMX setup, wiring tables (SPI/I2C/UART), code
-- (still to come: `troubleshooting.md`)
+- [Supported features](docs/supported_features.md) — capability matrix + known limitations
+- [Troubleshooting](docs/troubleshooting.md) — common failures and fixes
 
-## Host-side tests
+---
 
-The core library compiles and runs on a host (no hardware needed) using a
-mocked MFRC522 register file:
+## Building & testing
+
+**Host tests** (no hardware needed) — the core library compiles and runs on a
+host using a mocked MFRC522 (register file + emulated ISO 14443-A card):
 
 ```sh
-cc -std=c99 -Wall -Wextra -Iinclude \
-   tests/test_transport.c src/mfrc522.c src/mfrc522_registers.c src/mfrc522_crc.c \
-   interface/mfrc522_spi.c interface/mfrc522_i2c.c interface/mfrc522_uart.c \
-   -o test_transport && ./test_transport
+# Core: transports + register driver + protocol + MIFARE + CRC + IRQ
+cc -std=c99 -Wall -Wextra -Wpedantic -Iinclude \
+   tests/test_transport.c src/*.c interface/*.c -o test_transport
+./test_transport
+
+# STM32 adapter wiring (uses the minimal HAL stub)
+cc -std=c99 -Wall -Wextra -Wpedantic -DSTM32H743xx \
+   -Iinclude -Iplatform/stm32 -Itests/stm32_hal_stub \
+   tests/test_stm32_adapter.c src/*.c interface/*.c platform/stm32/*.c \
+   tests/stm32_hal_stub/stm32h7xx_hal.c -o test_stm32_adapter
+./test_stm32_adapter
 ```
 
 or via CMake: `cmake -S . -B build -DMFRC522_BUILD_TESTS=ON && cmake --build build && ctest --test-dir build`.
+
+**On target** — copy `include/`, `src/`, `interface/`, `platform/stm32/` into
+your CubeIDE project and use one of the [examples](examples/README.md).
 
 ---
 
@@ -129,6 +140,22 @@ or via CMake: `cmake -S . -B build -DMFRC522_BUILD_TESTS=ON && cmake --build bui
 - I²C 7-bit address default **0x28** (all ADR pins + EA low).
 - 64-byte FIFO; hardware CRC/parity/framing; hardware Crypto1 (MFAuthent).
 - Version register default **0x92** (silicon v2.0).
+
+---
+
+## Supported / partially supported / not supported
+
+See [docs/supported_features.md](docs/supported_features.md) for the full
+matrix. Highlights:
+
+- ✅ SPI / I²C / UART transports; ISO 14443-A (REQA, anti-collision, select,
+  HALT); MIFARE Classic 1K/4K/Mini (auth, block, sector, value ops);
+  Ultralight/NTAG page read; self-test; IRQ; low-power.
+- ⚠️ 7/10-byte-UID *authentication* (auth uses last 4 UID bytes); receiver-gain
+  exposed as a register only.
+- ❌ MIFARE DESFire / Plus / ISO 14443-4 (T=CL); NTAG password auth / ECC; a
+  non-blocking `Start/Process` state machine (see rationale in
+  `architecture.md` §5).
 
 ---
 

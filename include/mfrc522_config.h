@@ -61,17 +61,6 @@
 #endif
 
 /**
- * @brief Enable the non-blocking (asynchronous) operation state machine.
- *
- * The blocking API is always available. Enabling this adds a small amount of
- * RAM (one operation context in the handle state) but does not require any
- * dynamic allocation.
- */
-#ifndef MFRC522_ENABLE_NONBLOCKING
-#define MFRC522_ENABLE_NONBLOCKING (0)
-#endif
-
-/**
  * @brief Enable debug logging through the MFRC522_Debug_t callback interface.
  *
  * When disabled, all MFRC522_LOG*() calls compile to nothing.

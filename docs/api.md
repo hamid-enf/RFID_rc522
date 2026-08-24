@@ -171,20 +171,7 @@ MFRC522_Status_t MFRC522_Transfer (MFRC522_Handle_t *, uint8_t block);
 
 ---
 
-## 8. Non-blocking API (`MFRC522_ENABLE_NONBLOCKING`)
-
-```c
-MFRC522_Status_t MFRC522_StartReadUID(MFRC522_Handle_t *handle);
-MFRC522_Status_t MFRC522_Process(MFRC522_Handle_t *handle);
-uint8_t          MFRC522_IsOperationComplete(const MFRC522_Handle_t *handle, MFRC522_Status_t *result);
-```
-- `StartReadUID` returns `MFRC522_ERR_BUSY` if another op is in flight.
-- `Process` advances one step; returns `MFRC522_ERR_BUSY` while running.
-- `IsOperationComplete` returns non-zero when done and copies the final status.
-
----
-
-## 9. IRQ API (`MFRC522_ENABLE_IRQ`)
+## 8. IRQ API (`MFRC522_ENABLE_IRQ`)
 
 ```c
 typedef void (*MFRC522_IrqCallback_t)(MFRC522_Handle_t *, uint8_t irq_source, void *user);
@@ -198,7 +185,7 @@ MFRC522_Status_t MFRC522_ProcessIRQ(MFRC522_Handle_t *handle);
 
 ---
 
-## 10. Low power
+## 9. Low power
 
 ```c
 MFRC522_Status_t MFRC522_Sleep   (MFRC522_Handle_t *handle);  /* soft power-down */
@@ -212,17 +199,18 @@ MFRC522_Status_t MFRC522_PowerDown(MFRC522_Handle_t *handle); /* NRSTPD low */
 
 ---
 
-## 11. Debug / utility
+## 10. Debug / utility
 
 ```c
 void              MFRC522_AttachDebug(MFRC522_Handle_t *, const MFRC522_Debug_t *debug);
 MFRC522_Status_t  MFRC522_GetLastError(const MFRC522_Handle_t *handle);
 const char       *MFRC522_StatusToString(MFRC522_Status_t status);
+const char       *MFRC522_CardTypeToString(MFRC522_CardType_t type);
 ```
 
 ---
 
-## 12. Platform adapters (STM32)
+## 11. Platform adapters (STM32)
 
 ```c
 MFRC522_Status_t MFRC522_STM32_SPI_Init (MFRC522_Handle_t *, SPI_HandleTypeDef *hspi, GPIO_TypeDef *cs_port, uint16_t cs_pin, GPIO_TypeDef *rst_port, uint16_t rst_pin, GPIO_TypeDef *irq_port, uint16_t irq_pin);

@@ -19,7 +19,7 @@ Application
 MFRC522 High-Level API            (mfrc522.h  → src/mfrc522.c)
     ├── Card detection / UID / card info
     ├── Antenna / power / version / self-test
-    └── Non-blocking + IRQ facade
+    └── IRQ facade
     │
     ▼
 MFRC522 Protocol Layer            (mfrc522_protocol.h → src/mfrc522_protocol.c)
@@ -107,7 +107,7 @@ typedef struct MFRC522_Handle {
     const MFRC522_TransportOps_t *transport_ops; /* framing vtable (const/ROM)      */
     MFRC522_Platform_t           platform;       /* MCU vtable + opaque ctx         */
     MFRC522_Config_t             config;         /* runtime config copy             */
-    MFRC522_State_t              state;          /* version/flags/last-error + async */
+    MFRC522_State_t              state;          /* version/flags/last-error        */
     const MFRC522_Debug_t       *debug;          /* optional log sink               */
     union { ... } platform_storage;              /* adapter private ctx (aligned)   */
 } MFRC522_Handle_t;
@@ -131,9 +131,8 @@ For RTOS use, the platform adapter supplies `lock`/`unlock` callbacks (e.g.
 wrapping a FreeRTOS mutex). The core wraps each top-level operation in
 `lock()/unlock()` when a lock is present, making high-level calls atomic on a
 shared bus. When no lock is provided the code is simply single-threaded.
-
-The non-blocking API (see below) is designed to be called from a single RTOS
-task; it never blocks inside a lock.
+In an RTOS, run the reader in its own task; the bounded blocking primitives
+(`MFRC522_IsCardPresent` etc.) keep every call short enough to be preemptible.
 
 ---
 
@@ -141,11 +140,21 @@ task; it never blocks inside a lock.
 
 - **Blocking** API (`MFRC522_ReadUID`, `MFRC522_ReadBlock`, ...) — simple,
   every wait loop has a configurable timeout.
-- **Non-blocking** API (`MFRC522_StartReadUID` + `MFRC522_Process`) — a small
-  cooperative state machine stored inside the handle (`state.async`). Enabled
-  only when `MFRC522_ENABLE_NONBLOCKING == 1` so it costs zero RAM otherwise.
-  The design deliberately reuses the blocking primitives one step at a time
-  rather than duplicating protocol logic, which keeps RAM/Flash low.
+- **Non-blocking** behaviour is achieved structurally rather than with a
+  separate asynchronous API:
+
+  - `MFRC522_IsCardPresent()` is a short, bounded poll (~50 ms by default) that
+    never blocks long enough to disturb a real-time loop.
+  - The IRQ path (`MFRC522_AttachIRQCallback` + `MFRC522_ProcessIRQ`) lets the
+    application react to reader events asynchronously.
+  - For RTOS, run the reader in its own task and let the scheduler preempt it.
+
+  A dedicated `StartXxx()/Process()` state machine was considered and
+  **deliberately rejected**: the cascade anti-collision loop is inherently
+  iterative with per-iteration collisions that make a resumable state machine
+  large and hard to verify. The bounded blocking primitives above provide the
+  same real-time responsiveness with a fraction of the code and RAM. See
+  `docs/supported_features.md` ("Not supported").
 
 ---
 
@@ -192,7 +201,6 @@ out entirely when `MFRC522_ENABLE_DEBUG == 0`.
 | `MFRC522_ENABLE_SPI/I2C/UART` | 1       | Include the matching transport  |
 | `MFRC522_ENABLE_IRQ`          | 1       | IRQ API + dispatcher             |
 | `MFRC522_ENABLE_MIFARE`       | 1       | MIFARE Classic/Ultralight layer  |
-| `MFRC522_ENABLE_NONBLOCKING`  | 0       | Async state machine              |
 | `MFRC522_ENABLE_DEBUG`        | 0       | Debug logging                    |
 
 Disabling a feature removes its code at link time (the linker drops the

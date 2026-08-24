@@ -49,29 +49,6 @@ typedef void (*MFRC522_IrqCallback_t)(MFRC522_Handle_t *handle,
 #define MFRC522_FLAG_INITIALIZED   (0x01u)
 #define MFRC522_FLAG_ANTENNA_ON    (0x02u)
 
-/** Async operation identifiers (non-blocking mode). */
-typedef enum MFRC522_AsyncOp
-{
-    MFRC522_ASYNC_NONE = 0,
-    MFRC522_ASYNC_READ_UID,
-    MFRC522_ASYNC_READ_BLOCK,
-    MFRC522_ASYNC_WRITE_BLOCK,
-    MFRC522_ASYNC_COUNT
-} MFRC522_AsyncOp_t;
-
-/** Internal async state machine context (non-blocking mode only). */
-typedef struct MFRC522_AsyncState
-{
-    MFRC522_AsyncOp_t op;        /**< Operation being executed.         */
-    uint8_t  step;               /**< Current step of the state machine.*/
-    uint32_t deadline_tick;      /**< Absolute ms tick for the timeout. */
-    MFRC522_Status_t result;     /**< Final/current result.             */
-    uint8_t  buf[MFRC522_BLOCK_SIZE + 8]; /**< Scratch (UID / block).   */
-    uint8_t  buf_len;            /**< Valid bytes in buf.               */
-    uint8_t  block;              /**< Block index (read/write).         */
-    uint8_t  key_type;           /**< MFRC522_KeyType_t (auth).         */
-} MFRC522_AsyncState_t;
-
 /**
  * @brief Per-reader runtime state (all inside the handle: no globals).
  */
@@ -84,9 +61,6 @@ typedef struct MFRC522_State
 #if MFRC522_ENABLE_IRQ
     MFRC522_IrqCallback_t irq_callback; /**< Registered IRQ callback.   */
     void                 *irq_user;     /**< Callback user context.     */
-#endif
-#if MFRC522_ENABLE_NONBLOCKING
-    MFRC522_AsyncState_t async;  /**< Non-blocking state machine.      */
 #endif
 } MFRC522_State_t;
 
@@ -226,30 +200,6 @@ MFRC522_Status_t MFRC522_GetCardInfo(MFRC522_Handle_t *handle,
                                      MFRC522_CardInfo_t *info);
 
 /* ================================================================== */
-/*  Non-blocking API                                                 */
-/* ================================================================== */
-
-#if MFRC522_ENABLE_NONBLOCKING
-/**
- * @brief Start a non-blocking UID read. Poll with MFRC522_Process().
- */
-MFRC522_Status_t MFRC522_StartReadUID(MFRC522_Handle_t *handle);
-
-/**
- * @brief Advance any in-flight non-blocking operation (call from main loop
- *        or an RTOS task). Returns MFRC522_ERR_BUSY while still running.
- */
-MFRC522_Status_t MFRC522_Process(MFRC522_Handle_t *handle);
-
-/**
- * @brief True when the last started operation finished.
- * @param result  Receives the final status (may be NULL).
- */
-uint8_t MFRC522_IsOperationComplete(const MFRC522_Handle_t *handle,
-                                    MFRC522_Status_t *result);
-#endif
-
-/* ================================================================== */
 /*  IRQ                                                              */
 /* ================================================================== */
 
@@ -312,6 +262,11 @@ MFRC522_Status_t MFRC522_GetLastError(const MFRC522_Handle_t *handle);
  * @brief Human-readable name of a status code (static string).
  */
 const char *MFRC522_StatusToString(MFRC522_Status_t status);
+
+/**
+ * @brief Human-readable name of a card type (static string).
+ */
+const char *MFRC522_CardTypeToString(MFRC522_CardType_t type);
 
 #ifdef __cplusplus
 }

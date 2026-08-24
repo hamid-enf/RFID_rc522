@@ -11,6 +11,8 @@
 DWT_Type mfrc522_stub_dwt;
 CoreDebug_Type mfrc522_stub_coredebug;
 
+HAL_StatusTypeDef HAL_Init(void) { return HAL_OK; }
+
 HAL_StatusTypeDef HAL_SPI_Transmit(SPI_HandleTypeDef *h, uint8_t *pData,
                                    uint16_t Size, uint32_t Timeout)
 { (void)h; (void)pData; (void)Size; (void)Timeout; return HAL_OK; }
