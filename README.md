@@ -22,8 +22,8 @@ The project is delivered in phases:
 | 2 | Register driver + transport layer | ✅ done |
 | 3 | SPI / I²C / UART transports | ✅ done |
 | 4 | ISO/IEC 14443-A protocol | ✅ done |
-| 5 | MIFARE layer | ⏳ next |
-| 6 | STM32H743 HAL adapter | ⏳ |
+| 5 | MIFARE layer | ✅ done |
+| 6 | STM32H743 HAL adapter | ⏳ next |
 | 7 | Examples | ⏳ |
 | 8 | Tests + docs + optimization | ⏳ |
 
@@ -102,7 +102,8 @@ CMakeLists.txt           Build definition
 - [SPI interface](docs/spi.md) — framing, timing, wiring
 - [I2C interface](docs/i2c.md) — addressing (ADR/EA), framing, recovery
 - [UART interface](docs/uart.md) — LSB-first framing, baud table, limitations
-- (still to come: `mifare.md`, `stm32h743.md`, `troubleshooting.md`)
+- [MIFARE support](docs/mifare.md) — auth, blocks, sectors, value blocks, limits
+- (still to come: `stm32h743.md`, `troubleshooting.md`)
 
 ## Host-side tests
 

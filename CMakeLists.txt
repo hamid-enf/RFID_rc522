@@ -21,11 +21,10 @@ add_library(mfrc522_core STATIC
     src/mfrc522_crc.c
     src/mfrc522_irq.c
     src/mfrc522_protocol.c
+    src/mfrc522_mifare.c
     interface/mfrc522_spi.c
     interface/mfrc522_i2c.c
     interface/mfrc522_uart.c
-    # (added in later phases:)
-    # src/mfrc522_mifare.c     # Phase 5 — MIFARE layer
 )
 
 target_include_directories(mfrc522_core PUBLIC

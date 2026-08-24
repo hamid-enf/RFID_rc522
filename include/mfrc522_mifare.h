@@ -47,6 +47,10 @@ extern "C" {
 #define MFRC522_MF_RESTORE          (0xC2u)  /**< Restore value block.          */
 #define MFRC522_MF_TRANSFER         (0xB0u)  /**< Transfer to value block.      */
 
+/** MIFARE Classic 4-bit replies (received as a half-byte). */
+#define MFRC522_MF_ACK              (0x0Au)  /**< Acknowledge (accepted).        */
+#define MFRC522_MF_NAK              (0x00u)  /**< Not-acknowledge (rejected).    */
+
 /* ================================================================== */
 /*  High-level constants (card geometry)                             */
 /* ================================================================== */

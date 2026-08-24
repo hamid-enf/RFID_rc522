@@ -41,6 +41,10 @@ typedef struct {
     uint8_t  card_sak;
     uint8_t  card_atqa[2];
     uint8_t  card_state;
+    uint8_t  card_blocks[8][MFRC522_BLOCK_SIZE]; /* a few blocks        */
+    uint8_t  card_auth;      /* 1 = Crypto1 active                     */
+    uint8_t  card_pending_write;      /* 1 = next frame is write data  */
+    uint8_t  card_pending_block;      /* target block for pending write*/
 } mock_t;
 
 static uint32_t mock_get_tick_ms(void *ctx)
@@ -69,6 +73,14 @@ static void mock_reset_all(mock_t *m)
     m->card_atqa[0] = 0x04u;
     m->card_atqa[1] = 0x00u;
     m->card_state  = CARD_IDLE;
+    m->card_auth   = 0u;
+    /* Initialize block 4 with the classic demo pattern. */
+    {
+        uint8_t i;
+        for (i = 0u; i < 16u; i++) {
+            m->card_blocks[4][i] = (uint8_t)(0x11u + (uint16_t)i * 0x11u);
+        }
+    }
 }
 
 static void mock_fifo_push(mock_t *m, uint8_t v);
@@ -130,6 +142,54 @@ static void mock_handle_transceive(mock_t *m)
         m->reg[MFRC522_REG_COM_IRQ] |= (MFRC522_IRQ_RX | MFRC522_IRQ_IDLE);
         return;
     }
+
+    if (cmd == MFRC522_MF_READ) {
+        /* READ: reply 16 data bytes + CRC_A. */
+        uint8_t blk = tx[1];
+        uint8_t j;
+        for (j = 0u; j < 16u; j++) {
+            mock_fifo_push(m, m->card_blocks[blk & 0x07u][j]);
+        }
+        MFRC522_CRC_A(m->card_blocks[blk & 0x07u], 16u, &crc);
+        mock_fifo_push(m, (uint8_t)(crc & 0xFFu));
+        mock_fifo_push(m, (uint8_t)(crc >> 8));
+        m->reg[MFRC522_REG_CONTROL] = 0x00u;   /* full bytes */
+        m->reg[MFRC522_REG_COM_IRQ] |= (MFRC522_IRQ_RX | MFRC522_IRQ_IDLE);
+        return;
+    }
+
+    /* Pending write data (step 2 of MIFARE WRITE: 16 data bytes + CRC). */
+    if (m->card_pending_write != 0u) {
+        uint8_t blk = m->card_pending_block;
+        uint8_t j;
+        m->card_pending_write = 0u;
+        for (j = 0u; j < 16u; j++) {
+            m->card_blocks[blk & 0x07u][j] = tx[j];
+        }
+        mock_fifo_push(m, MFRC522_MF_ACK);
+        m->reg[MFRC522_REG_CONTROL] = 0x04u;   /* 4-bit nibble */
+        m->reg[MFRC522_REG_COM_IRQ] |= (MFRC522_IRQ_RX | MFRC522_IRQ_IDLE);
+        return;
+    }
+
+    if (cmd == MFRC522_MF_WRITE) {
+        /* WRITE step 1 (cmd + block): latch the target, reply ACK. */
+        m->card_pending_write = 1u;
+        m->card_pending_block = tx[1];
+        mock_fifo_push(m, MFRC522_MF_ACK);
+        m->reg[MFRC522_REG_CONTROL] = 0x04u;   /* 4-bit nibble */
+        m->reg[MFRC522_REG_COM_IRQ] |= (MFRC522_IRQ_RX | MFRC522_IRQ_IDLE);
+        return;
+    }
+
+    if ((cmd == MFRC522_MF_INCREMENT) || (cmd == MFRC522_MF_DECREMENT) ||
+        (cmd == MFRC522_MF_RESTORE) || (cmd == MFRC522_MF_TRANSFER)) {
+        /* Value ops: acknowledge the (first) step. */
+        mock_fifo_push(m, MFRC522_MF_ACK);
+        m->reg[MFRC522_REG_CONTROL] = 0x04u;   /* 4-bit nibble */
+        m->reg[MFRC522_REG_COM_IRQ] |= (MFRC522_IRQ_RX | MFRC522_IRQ_IDLE);
+        return;
+    }
 }
 
 static void mock_fifo_push(mock_t *m, uint8_t v)
@@ -183,6 +243,10 @@ static void mock_write_reg(mock_t *m, uint8_t addr, uint8_t val)
             m->reg[MFRC522_REG_DIV_IRQ] |= MFRC522_DIV_IRQ_CRC;
         } else if (val == MFRC522_CMD_TRANSCEIVE) {
             mock_handle_transceive(m);
+        } else if (val == MFRC522_CMD_MF_AUTHENT) {
+            m->card_auth = 1u;
+            m->reg[MFRC522_REG_STATUS2] |= MFRC522_STATUS2_CRYPTO1_ON;
+            m->reg[MFRC522_REG_COM_IRQ] |= MFRC522_IRQ_IDLE;
         }
         return;
     }
@@ -505,6 +569,82 @@ static void run_protocol_tests(void)
     CHECK(MFRC522_IsCardPresent(&handle) == MFRC522_ERR_NO_CARD);
 }
 
+#if MFRC522_ENABLE_MIFARE
+static void run_mifare_tests(void)
+{
+    mock_t mock;
+    MFRC522_Handle_t handle;
+    MFRC522_Key_t key;
+    MFRC522_UID_t uid;
+    uint8_t data[16];
+    uint8_t block[16];
+    int32_t value = 1234567;
+    uint8_t i;
+    MFRC522_Status_t s;
+
+    printf("== MIFARE ==\n");
+
+    mock_reset_all(&mock);
+    memset(&handle, 0, sizeof(handle));
+    handle.transport.type = MFRC522_TRANSPORT_SPI;
+    handle.transport_ops = &MFRC522_SPI_TransportOps;
+    handle.platform.ops = &SPI_OPS;
+    handle.platform.ctx = &mock;
+
+    CHECK(MFRC522_Init(&handle) == MFRC522_OK);
+
+    /* Select the card, then authenticate with the factory key. */
+    memset(&uid, 0, sizeof(uid));
+    CHECK(MFRC522_ReadUID(&handle, &uid) == MFRC522_OK);
+
+    for (i = 0; i < 6; i++) key.key[i] = 0xFFu;
+    s = MFRC522_Authenticate(&handle, MFRC522_KEY_A, &key, 4u,
+                             uid.bytes, uid.length);
+    CHECK(s == MFRC522_OK);
+    CHECK(mock.card_auth == 1u);
+
+    /* Read block 4. */
+    memset(data, 0, sizeof(data));
+    s = MFRC522_ReadBlock(&handle, 4u, data);
+    CHECK(s == MFRC522_OK);
+    CHECK(data[0] == 0x11u);
+    CHECK(data[1] == 0x22u);
+    CHECK(data[15] == (uint8_t)(0x11u + 15u * 0x11u)); /* 0x11+0xFF=0x10? verify */
+
+    /* Write block 5, then read it back. */
+    for (i = 0; i < 16; i++) data[i] = (uint8_t)(0xA0u + i);
+    s = MFRC522_WriteBlock(&handle, 5u, data);
+    CHECK(s == MFRC522_OK);
+
+    memset(data, 0, sizeof(data));
+    s = MFRC522_ReadBlock(&handle, 5u, data);
+    CHECK(s == MFRC522_OK);
+    CHECK(data[0] == 0xA0u);
+    CHECK(data[15] == 0xAFu);
+
+    /* Stop Crypto1. */
+    CHECK(MFRC522_StopCrypto1(&handle) == MFRC522_OK);
+
+    /* Value-block formatting is deterministic. */
+    MFRC522_FormatValueBlock(block, value, 0x05u);
+    {
+        uint8_t inv0 = (uint8_t)(block[0] ^ 0xFFu);
+        uint8_t inv_addr = (uint8_t)(0x05u ^ 0xFFu);
+        CHECK(block[0] == (uint8_t)(value & 0xFFu));
+        CHECK(block[4] == inv0);
+        CHECK(block[8] == block[0]);
+        CHECK(block[12] == 0x05u);
+        CHECK(block[13] == inv_addr);
+    }
+
+    /* Value ops run their two-step protocol against the mock. */
+    CHECK(MFRC522_Increment(&handle, 5u, 1) == MFRC522_OK);
+    CHECK(MFRC522_Decrement(&handle, 5u, 1) == MFRC522_OK);
+    CHECK(MFRC522_Restore(&handle, 5u) == MFRC522_OK);
+    CHECK(MFRC522_Transfer(&handle, 5u) == MFRC522_OK);
+}
+#endif
+
 #if MFRC522_ENABLE_IRQ
 static uint8_t g_irq_hits = 0;
 static uint8_t g_irq_sources = 0;
@@ -570,6 +710,9 @@ int main(void)
 #endif
 
     run_protocol_tests();
+#if MFRC522_ENABLE_MIFARE
+    run_mifare_tests();
+#endif
     run_crc_tests();
 
     if (g_failures == 0) {
