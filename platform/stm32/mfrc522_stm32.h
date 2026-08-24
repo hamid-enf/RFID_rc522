@@ -47,11 +47,30 @@ extern "C" {
 #endif
 
 /**
- * @brief Compile-time assertion helper (MISRA-friendly: no _Static_assert
- *        macro tricks, uses a typedef of a negative-size array on failure).
+ * @brief Shared reset/IRQ GPIO pair, common to every host-interface context.
+ *
+ * It is embedded as the FIRST member of each interface context so that the
+ * shared reset/IRQ helpers in mfrc522_stm32_gpio.c can treat the context
+ * pointer as a MFRC522_STM32_Gpio_t*. Both fields are optional (NULL/0 =
+ * not wired).
  */
-#define MFRC522_STM32_CT_ASSERT(cond) \
-    typedef char MFRC522_ct_assert_##__LINE__[(cond) ? 1 : -1]
+typedef struct MFRC522_STM32_Gpio
+{
+    GPIO_TypeDef *rst_port;     /**< NRSTPD port (may be NULL).   */
+    uint16_t      rst_pin;      /**< NRSTPD pin  (may be 0).      */
+    GPIO_TypeDef *irq_port;     /**< IRQ port    (may be NULL).   */
+    uint16_t      irq_pin;      /**< IRQ pin     (may be 0).      */
+} MFRC522_STM32_Gpio_t;
+
+/**
+ * @brief Compile-time assertion helper (portable C99: a typedef of a
+ *        negative-size array fails to compile if the condition is false).
+ *
+ * Two-level expansion so __LINE__ is unique per use site.
+ */
+#define MFRC522_STM32_CT_ASSERT_(cond, line) \
+    typedef char MFRC522_ct_assert_##line[(cond) ? 1 : -1]
+#define MFRC522_STM32_CT_ASSERT(cond) MFRC522_STM32_CT_ASSERT_(cond, __LINE__)
 
 #ifdef __cplusplus
 }

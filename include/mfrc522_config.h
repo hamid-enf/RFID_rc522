@@ -90,12 +90,14 @@
  * The platform adapter (e.g. platform/stm32) stores its private context
  * (peripheral handle, GPIO ports/pins, ...) inside the MFRC522_Handle_t.
  * This buffer must be large enough to hold the adapter's context struct.
- * 32 bytes is sufficient for every adapter shipped with this library; raise
- * it if a custom adapter needs more. A compile-time check in the adapter
- * asserts that the chosen size is sufficient.
+ *
+ * On a 32-bit MCU the STM32 SPI context needs 24 bytes; on a 64-bit host
+ * (used for compile/run tests) it needs 56 bytes. 64 covers both, stays
+ * naturally aligned, and costs only 64 bytes of RAM per handle on target.
+ * A compile-time check in the adapter asserts that the chosen size suffices.
  */
 #ifndef MFRC522_PLATFORM_CTX_SIZE
-#define MFRC522_PLATFORM_CTX_SIZE (32u)
+#define MFRC522_PLATFORM_CTX_SIZE (64u)
 #endif
 
 /**

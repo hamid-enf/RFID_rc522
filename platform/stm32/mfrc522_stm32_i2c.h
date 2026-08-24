@@ -18,14 +18,15 @@ extern "C" {
 
 /**
  * @brief Private I2C-adapter context (stored inside the handle).
+ *
+ * The MFRC522_STM32_Gpio_t (reset/IRQ) is the first member so the shared
+ * GPIO helpers can address it through the context pointer.
  */
 typedef struct MFRC522_STM32_I2C_Context
 {
-    I2C_HandleTypeDef *hi2c;     /**< Configured I2C peripheral.              */
-    GPIO_TypeDef      *rst_port; /**< Reset (NRSTPD) port.                    */
-    uint16_t           rst_pin;  /**< Reset (NRSTPD) pin.                     */
-    GPIO_TypeDef      *irq_port; /**< IRQ port (may be NULL).                 */
-    uint16_t           irq_pin;  /**< IRQ pin (may be 0).                     */
+    MFRC522_STM32_Gpio_t gpio;   /**< Shared reset/IRQ (must stay first).  */
+    I2C_HandleTypeDef *hi2c;     /**< Configured I2C peripheral.           */
+    uint8_t             dev_addr;/**< 7-bit device address (default 0x28). */
 } MFRC522_STM32_I2C_Context_t;
 
 /**

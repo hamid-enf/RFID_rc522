@@ -22,14 +22,14 @@ extern "C" {
 
 /**
  * @brief Private UART-adapter context (stored inside the handle).
+ *
+ * The MFRC522_STM32_Gpio_t (reset/IRQ) is the first member so the shared
+ * GPIO helpers can address it through the context pointer.
  */
 typedef struct MFRC522_STM32_UART_Context
 {
-    UART_HandleTypeDef *huart;   /**< Configured UART peripheral.             */
-    GPIO_TypeDef       *rst_port;/**< Reset (NRSTPD) port.                    */
-    uint16_t            rst_pin; /**< Reset (NRSTPD) pin.                     */
-    GPIO_TypeDef       *irq_port;/**< IRQ port (may be NULL).                 */
-    uint16_t            irq_pin; /**< IRQ pin (may be 0).                     */
+    MFRC522_STM32_Gpio_t gpio;   /**< Shared reset/IRQ (must stay first).  */
+    UART_HandleTypeDef *huart;   /**< Configured UART peripheral.          */
 } MFRC522_STM32_UART_Context_t;
 
 /**

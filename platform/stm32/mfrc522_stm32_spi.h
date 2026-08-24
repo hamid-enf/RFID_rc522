@@ -32,16 +32,16 @@ extern "C" {
  *
  * @warning Must fit in MFRC522_PLATFORM_CTX_SIZE; a compile-time check in the
  *          implementation enforces this.
+ *
+ * The MFRC522_STM32_Gpio_t (reset/IRQ) is the first member so the shared
+ * GPIO helpers can address it through the context pointer.
  */
 typedef struct MFRC522_STM32_SPI_Context
 {
-    SPI_HandleTypeDef *hspi;     /**< Configured SPI peripheral.              */
-    GPIO_TypeDef      *cs_port;  /**< Chip-select port.                       */
-    uint16_t           cs_pin;   /**< Chip-select pin.                        */
-    GPIO_TypeDef      *rst_port; /**< Reset (NRSTPD) port.                    */
-    uint16_t           rst_pin;  /**< Reset (NRSTPD) pin.                     */
-    GPIO_TypeDef      *irq_port; /**< IRQ port (may be NULL if unused).       */
-    uint16_t           irq_pin;  /**< IRQ pin (may be 0 if unused).           */
+    MFRC522_STM32_Gpio_t gpio;   /**< Shared reset/IRQ (must stay first).  */
+    SPI_HandleTypeDef *hspi;     /**< Configured SPI peripheral.           */
+    GPIO_TypeDef      *cs_port;  /**< Chip-select port.                    */
+    uint16_t           cs_pin;   /**< Chip-select pin.                     */
 } MFRC522_STM32_SPI_Context_t;
 
 /**

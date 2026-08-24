@@ -23,8 +23,8 @@ The project is delivered in phases:
 | 3 | SPI / I²C / UART transports | ✅ done |
 | 4 | ISO/IEC 14443-A protocol | ✅ done |
 | 5 | MIFARE layer | ✅ done |
-| 6 | STM32H743 HAL adapter | ⏳ next |
-| 7 | Examples | ⏳ |
+| 6 | STM32H743 HAL adapter | ✅ done |
+| 7 | Examples | ⏳ next |
 | 8 | Tests + docs + optimization | ⏳ |
 
 ---
@@ -103,7 +103,8 @@ CMakeLists.txt           Build definition
 - [I2C interface](docs/i2c.md) — addressing (ADR/EA), framing, recovery
 - [UART interface](docs/uart.md) — LSB-first framing, baud table, limitations
 - [MIFARE support](docs/mifare.md) — auth, blocks, sectors, value blocks, limits
-- (still to come: `stm32h743.md`, `troubleshooting.md`)
+- [STM32H743 setup](docs/stm32h743.md) — CubeMX setup, wiring tables (SPI/I2C/UART), code
+- (still to come: `troubleshooting.md`)
 
 ## Host-side tests
 
