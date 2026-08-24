@@ -25,6 +25,19 @@
 extern "C" {
 #endif
 
+/* ------------------------------------------------------------------ */
+/* Forward declaration of the main reader handle.                     */
+/* ------------------------------------------------------------------ */
+
+/**
+ * @brief The main reader handle is *defined* in mfrc522.h (it needs the
+ *        transport/platform types). It is forward-declared here so the
+ *        protocol / MIFARE headers can reference MFRC522_Handle_t* in their
+ *        prototypes without a circular include.
+ */
+struct MFRC522_Handle;
+typedef struct MFRC522_Handle MFRC522_Handle_t;
+
 /* ================================================================== */
 /*  Status / error codes                                              */
 /* ================================================================== */

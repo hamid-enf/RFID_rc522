@@ -23,10 +23,7 @@
 extern "C" {
 #endif
 
-/* ------------------------------------------------------------------ */
-/* Forward declaration of the handle (defined in mfrc522.h).          */
-/* ------------------------------------------------------------------ */
-typedef struct MFRC522_Handle MFRC522_Handle_t;
+/* MFRC522_Handle_t is forward-declared in mfrc522_types.h. */
 
 /* ================================================================== */
 /*  ISO/IEC 14443-A command bytes                                     */
@@ -104,10 +101,16 @@ MFRC522_Status_t MFRC522_WUPA(MFRC522_Handle_t *handle,
 /**
  * @brief Run the anti-collision loop for one cascade level.
  *
- * @param cascade   Cascade level (0..2 => SEL 0x93/0x95/0x97).
- * @param uid       Receives the level's UID part (3 or 4 bytes).
- * @param uid_len   In: capacity; out: bytes stored.
- * @param sak       Receives SAK of the final select (may be NULL).
+ * Performs the anti-collision + select of a single cascade level and returns
+ * that level's UID fragment (3 or 4 bytes, cascade tag already stripped) and
+ * the SAK. If the SAK has bit 2 set (0x04), the UID continues in the next
+ * cascade level and the caller should call again with cascade+1.
+ *
+ * @param cascade   0..2  => SEL 0x93 / 0x95 / 0x97.
+ * @param uid       Receives the level's UID fragment (3 or 4 bytes).
+ * @param uid_len   In: capacity (>= 4); out: bytes stored.
+ * @param sak       Receives the SAK of this level's select (may be NULL).
+ * @return          MFRC522_OK, MFRC522_ERR_COLLISION (unresolvable), etc.
  */
 MFRC522_Status_t MFRC522_Anticollision(MFRC522_Handle_t *handle,
                                        uint8_t cascade,
@@ -115,14 +118,19 @@ MFRC522_Status_t MFRC522_Anticollision(MFRC522_Handle_t *handle,
                                        uint8_t *sak);
 
 /**
- * @brief Select a fully-resolved UID.
- * @param uid     UID bytes.
- * @param uid_len UID length (4, 7 or 10).
- * @param sak     Receives SAK (may be NULL).
+ * @brief Full anti-collision + select: resolve the complete card UID.
+ *
+ * Runs the cascade anti-collision across all levels (handling cascade tags
+ * and BCC) and returns the complete 4/7/10-byte UID and the final SAK.
+ * The card must be in READY state (after REQA/WUPA).
+ *
+ * @param uid       Receives the complete UID bytes.
+ * @param uid_len   In: capacity (>= MFRC522_UID_MAX_LEN); out: 4/7/10.
+ * @param sak       Receives the final SAK.
  */
-MFRC522_Status_t MFRC522_SelectTag(MFRC522_Handle_t *handle,
-                                   const uint8_t *uid, uint32_t uid_len,
-                                   uint8_t *sak);
+MFRC522_Status_t MFRC522_SelectCard(MFRC522_Handle_t *handle,
+                                    uint8_t *uid, uint32_t *uid_len,
+                                    uint8_t *sak);
 
 /**
  * @brief Put the card in HALT state (0x50 + CRC_A).

@@ -22,6 +22,12 @@
 /*  Mock device                                                       */
 /* ================================================================== */
 
+/* Card state machine (emulated ISO/IEC 14443-A PICC). */
+#define CARD_IDLE   0u
+#define CARD_READY  1u
+#define CARD_ACTIVE 2u
+#define CARD_HALT   3u
+
 typedef struct {
     uint8_t  reg[64];        /* register file                          */
     uint8_t  fifo[64];       /* FIFO ring buffer                       */
@@ -30,6 +36,11 @@ typedef struct {
     uint8_t  fifo_count;
     uint8_t  pending_addr;   /* SPI/UART read-after-address latch      */
     uint32_t tick;
+    /* emulated PICC */
+    uint8_t  card_uid[4];    /* 4-byte UID (MIFARE 1K)                 */
+    uint8_t  card_sak;
+    uint8_t  card_atqa[2];
+    uint8_t  card_state;
 } mock_t;
 
 static uint32_t mock_get_tick_ms(void *ctx)
@@ -49,6 +60,76 @@ static void mock_reset_all(mock_t *m)
     memset(m, 0, sizeof(*m));
     m->reg[MFRC522_REG_VERSION] = MFRC522_VERSION_V2_0;
     m->reg[MFRC522_REG_MODE]    = 0x3Fu;   /* reset default */
+    /* Default card: MIFARE Classic 1K, UID DE AD BE EF, SAK 0x08. */
+    m->card_uid[0] = 0xDEu;
+    m->card_uid[1] = 0xADu;
+    m->card_uid[2] = 0xBEu;
+    m->card_uid[3] = 0xEFu;
+    m->card_sak    = 0x08u;
+    m->card_atqa[0] = 0x04u;
+    m->card_atqa[1] = 0x00u;
+    m->card_state  = CARD_IDLE;
+}
+
+static void mock_fifo_push(mock_t *m, uint8_t v);
+static uint8_t mock_fifo_pop(mock_t *m);
+
+/* Emulate the MFRC522 transceive command against the card state machine. */
+static void mock_handle_transceive(mock_t *m)
+{
+    uint8_t tx[64];
+    uint8_t n = m->fifo_count;
+    uint8_t cmd;
+    uint8_t i;
+    uint16_t crc;
+
+    /* Drain the TX bytes out of the FIFO. */
+    for (i = 0u; i < n; i++) {
+        tx[i] = mock_fifo_pop(m);
+    }
+    if (n == 0u) {
+        return;
+    }
+    cmd = tx[0];
+
+    if ((cmd == MFRC522_PICC_REQA) || (cmd == MFRC522_PICC_WUPA)) {
+        if ((cmd == MFRC522_PICC_REQA && m->card_state == CARD_IDLE) ||
+            (cmd == MFRC522_PICC_WUPA && (m->card_state == CARD_IDLE ||
+                                          m->card_state == CARD_HALT))) {
+            mock_fifo_push(m, m->card_atqa[0]);
+            mock_fifo_push(m, m->card_atqa[1]);
+            m->card_state = CARD_READY;
+            m->reg[MFRC522_REG_COM_IRQ] |= (MFRC522_IRQ_RX | MFRC522_IRQ_IDLE);
+        } else {
+            m->reg[MFRC522_REG_COM_IRQ] |= MFRC522_IRQ_TIMER;  /* no answer */
+        }
+        return;
+    }
+
+    if (cmd == MFRC522_PICC_HALT) {
+        m->card_state = CARD_HALT;
+        m->reg[MFRC522_REG_COM_IRQ] |= MFRC522_IRQ_TIMER;      /* no answer */
+        return;
+    }
+
+    if ((cmd == MFRC522_PICC_SELECT_TAG_1) || (cmd == MFRC522_PICC_SELECT_TAG_2) ||
+        (cmd == MFRC522_PICC_SELECT_TAG_3)) {
+        if (n >= 2u && (tx[1] & 0x70u) == 0x70u) {
+            /* SELECT: reply SAK + CRC_A(SAK). */
+            MFRC522_CRC_A(&m->card_sak, 1u, &crc);
+            mock_fifo_push(m, m->card_sak);
+            mock_fifo_push(m, (uint8_t)(crc & 0xFFu));
+            mock_fifo_push(m, (uint8_t)(crc >> 8));
+            m->card_state = CARD_ACTIVE;
+        } else {
+            /* ANTICOLLISION: reply with the 4-byte UID. */
+            for (i = 0u; i < 4u; i++) {
+                mock_fifo_push(m, m->card_uid[i]);
+            }
+        }
+        m->reg[MFRC522_REG_COM_IRQ] |= (MFRC522_IRQ_RX | MFRC522_IRQ_IDLE);
+        return;
+    }
 }
 
 static void mock_fifo_push(mock_t *m, uint8_t v)
@@ -100,6 +181,8 @@ static void mock_write_reg(mock_t *m, uint8_t addr, uint8_t val)
             m->reg[MFRC522_REG_CRC_RESULT_LSB] = (uint8_t)(crc & 0xFFu);
             m->reg[MFRC522_REG_CRC_RESULT_MSB] = (uint8_t)(crc >> 8);
             m->reg[MFRC522_REG_DIV_IRQ] |= MFRC522_DIV_IRQ_CRC;
+        } else if (val == MFRC522_CMD_TRANSCEIVE) {
+            mock_handle_transceive(m);
         }
         return;
     }
@@ -369,6 +452,59 @@ static void run_crc_tests(void)
     CHECK(residue == 0x0000u);
 }
 
+static void run_protocol_tests(void)
+{
+    mock_t mock;
+    MFRC522_Handle_t handle;
+    MFRC522_UID_t uid;
+    MFRC522_CardInfo_t info;
+    MFRC522_Status_t s;
+
+    printf("== protocol (card emulation) ==\n");
+
+    mock_reset_all(&mock);
+    memset(&handle, 0, sizeof(handle));
+    handle.transport.type = MFRC522_TRANSPORT_SPI;
+    handle.transport_ops = &MFRC522_SPI_TransportOps;
+    handle.platform.ops = &SPI_OPS;
+    handle.platform.ctx = &mock;
+
+    CHECK(MFRC522_Init(&handle) == MFRC522_OK);
+
+    /* Card present (WUPA wakes the IDLE card). */
+    CHECK(MFRC522_IsCardPresent(&handle) == MFRC522_OK);
+    CHECK(mock.card_state == CARD_READY);
+
+    /* Read the UID (select leaves the card ACTIVE). */
+    memset(&uid, 0, sizeof(uid));
+    s = MFRC522_ReadUID(&handle, &uid);
+    CHECK(s == MFRC522_OK);
+    CHECK(uid.length == 4u);
+    CHECK(uid.bytes[0] == 0xDEu && uid.bytes[1] == 0xADu &&
+          uid.bytes[2] == 0xBEu && uid.bytes[3] == 0xEFu);
+    CHECK(uid.sak == 0x08u);
+    CHECK(mock.card_state == CARD_ACTIVE);
+
+    /* Halt the card. */
+    CHECK(MFRC522_HaltTag(&handle) == MFRC522_OK);
+    CHECK(mock.card_state == CARD_HALT);
+
+    /* GetCardInfo: WUPA wakes the HALTed card, captures ATQA + select. */
+    memset(&info, 0, sizeof(info));
+    s = MFRC522_GetCardInfo(&handle, &info);
+    CHECK(s == MFRC522_OK);
+    CHECK(info.atqa[0] == 0x04u && info.atqa[1] == 0x00u);
+    CHECK(info.uid_length == 4u);
+    CHECK(info.sak == 0x08u);
+    CHECK(info.type == MFRC522_CARD_MIFARE_1K);
+    CHECK(info.uid[0] == 0xDEu && info.uid[3] == 0xEFu);
+
+    /* No card in the field: IsCardPresent must report NO_CARD. */
+    mock.card_state = CARD_ACTIVE;   /* already selected => WUPA no answer */
+    /* (simulate an absent card by moving it to ACTIVE, so WUPA/REQA fail) */
+    CHECK(MFRC522_IsCardPresent(&handle) == MFRC522_ERR_NO_CARD);
+}
+
 #if MFRC522_ENABLE_IRQ
 static uint8_t g_irq_hits = 0;
 static uint8_t g_irq_sources = 0;
@@ -433,6 +569,7 @@ int main(void)
     run_irq_test();
 #endif
 
+    run_protocol_tests();
     run_crc_tests();
 
     if (g_failures == 0) {

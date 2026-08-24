@@ -96,6 +96,49 @@ MFRC522_Status_t mfrc522_flush_fifo(MFRC522_Handle_t *h);
 /** Read the number of bytes currently in the FIFO. */
 MFRC522_Status_t mfrc522_get_fifo_level(MFRC522_Handle_t *h, uint8_t *level);
 
+/* ------------------------------------------------------------------ */
+/* Internal (unlocked) primitives used by the higher layers.          */
+/* ------------------------------------------------------------------ */
+
+/**
+ * @brief Hardware CRC coprocessor, unlocked variant (see MFRC522_CalcCRC).
+ */
+MFRC522_Status_t mfrc522_calc_crc(MFRC522_Handle_t *h,
+                                  const uint8_t *data, uint32_t len,
+                                  uint16_t *crc);
+
+/**
+ * @brief Low-level transceive with full bit-framing control.
+ *
+ * @param tx, tx_len       Data to transmit.
+ * @param rx, rx_len       In: capacity; out: bytes received.
+ * @param valid_bits       Out: number of valid bits in the last received byte.
+ * @param rx_align         Bit position for the first received bit (0..7).
+ * @param tx_last_bits     Number of valid bits in the last TX byte (0..7).
+ * @param check_crc        Validate a trailing CRC_A on the response.
+ */
+MFRC522_Status_t mfrc522_transceive(MFRC522_Handle_t *h,
+                                    const uint8_t *tx, uint32_t tx_len,
+                                    uint8_t *rx, uint32_t *rx_len,
+                                    uint8_t *valid_bits,
+                                    uint8_t rx_align, uint8_t tx_last_bits,
+                                    uint8_t check_crc, uint32_t timeout_ms);
+
+/**
+ * @brief Full anti-collision + select (discovery): resolve the card UID.
+ */
+MFRC522_Status_t mfrc522_select_full(MFRC522_Handle_t *h,
+                                     uint8_t *uid, uint32_t *uid_len,
+                                     uint8_t *sak);
+
+/**
+ * @brief REQA/WUPA with an explicit timeout (used by card-present checks).
+ */
+MFRC522_Status_t mfrc522_reqa_or_wupa(MFRC522_Handle_t *h,
+                                      uint8_t command,
+                                      uint8_t *atqa, uint32_t *atqa_len,
+                                      uint32_t timeout_ms);
+
 #ifdef __cplusplus
 }
 #endif

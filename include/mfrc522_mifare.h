@@ -31,7 +31,7 @@
 extern "C" {
 #endif
 
-typedef struct MFRC522_Handle MFRC522_Handle_t;
+/* MFRC522_Handle_t is forward-declared in mfrc522_types.h. */
 
 #if MFRC522_ENABLE_MIFARE
 

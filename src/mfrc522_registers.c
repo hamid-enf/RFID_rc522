@@ -186,9 +186,9 @@ MFRC522_Status_t mfrc522_wait_idle(MFRC522_Handle_t *h, uint32_t timeout_ms)
 /*  Hardware CRC coprocessor                                          */
 /* ================================================================== */
 
-MFRC522_Status_t MFRC522_CalcCRC(MFRC522_Handle_t *handle,
-                                 const uint8_t *data, uint32_t len,
-                                 uint16_t *crc)
+MFRC522_Status_t mfrc522_calc_crc(MFRC522_Handle_t *handle,
+                                  const uint8_t *data, uint32_t len,
+                                  uint16_t *crc)
 {
     MFRC522_Status_t status;
     uint8_t irq;
@@ -200,8 +200,6 @@ MFRC522_Status_t MFRC522_CalcCRC(MFRC522_Handle_t *handle,
         (len == 0u) || (len > MFRC522_FIFO_SIZE)) {
         return MFRC522_ERR_INVALID_PARAM;
     }
-
-    mfrc522_lock(handle);
 
     /* Stop any active command and clear the CRC-complete IRQ. */
     status = mfrc522_write_command(handle, MFRC522_CMD_IDLE);
@@ -243,6 +241,21 @@ MFRC522_Status_t MFRC522_CalcCRC(MFRC522_Handle_t *handle,
     *crc = (uint16_t)(((uint16_t)msb << 8) | (uint16_t)lsb);
 
 done:
+    return status;
+}
+
+MFRC522_Status_t MFRC522_CalcCRC(MFRC522_Handle_t *handle,
+                                 const uint8_t *data, uint32_t len,
+                                 uint16_t *crc)
+{
+    MFRC522_Status_t status;
+
+    if (handle == NULL) {
+        return MFRC522_ERR_INVALID_PARAM;
+    }
+
+    mfrc522_lock(handle);
+    status = mfrc522_calc_crc(handle, data, len, crc);
     mfrc522_unlock(handle);
     return status;
 }

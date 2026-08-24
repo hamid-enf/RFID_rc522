@@ -21,8 +21,8 @@ The project is delivered in phases:
 | 1 | Architecture + API design + file structure | ✅ done |
 | 2 | Register driver + transport layer | ✅ done |
 | 3 | SPI / I²C / UART transports | ✅ done |
-| 4 | ISO/IEC 14443-A protocol | ⏳ next |
-| 5 | MIFARE layer | ⏳ |
+| 4 | ISO/IEC 14443-A protocol | ✅ done |
+| 5 | MIFARE layer | ⏳ next |
 | 6 | STM32H743 HAL adapter | ⏳ |
 | 7 | Examples | ⏳ |
 | 8 | Tests + docs + optimization | ⏳ |

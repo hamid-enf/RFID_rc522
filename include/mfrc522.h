@@ -101,7 +101,7 @@ typedef struct MFRC522_State
  * struct (including the opaque platform storage used by the HAL adapter).
  * Initialize to zero ( `= {0}` ) before first use.
  */
-typedef struct MFRC522_Handle
+struct MFRC522_Handle
 {
     MFRC522_Transport_t        transport;      /**< Selected interface + params. */
     const MFRC522_TransportOps_t *transport_ops; /**< Framing function table.     */
@@ -117,7 +117,7 @@ typedef struct MFRC522_Handle
         void    *ptr_align;
         uint64_t u64_align;
     } platform_storage;
-} MFRC522_Handle_t;
+};
 
 /* ================================================================== */
 /*  Initialization / version / self-test                             */

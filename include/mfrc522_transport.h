@@ -32,8 +32,7 @@
 extern "C" {
 #endif
 
-/** Forward declaration of the reader handle (defined in mfrc522.h). */
-typedef struct MFRC522_Handle MFRC522_Handle_t;
+/* MFRC522_Handle_t is forward-declared in mfrc522_types.h. */
 
 /* ================================================================== */
 /*  Platform (MCU hardware abstraction)                              */

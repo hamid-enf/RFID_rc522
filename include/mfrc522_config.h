@@ -114,6 +114,15 @@
 #endif
 
 /**
+ * @brief Timeout for a single card-presence poll (REQA/WUPA) inside
+ *        MFRC522_IsCardPresent() / MFRC522_WaitForCard(). Kept short so the
+ *        presence check stays responsive.
+ */
+#ifndef MFRC522_CARD_POLL_TIMEOUT_MS
+#define MFRC522_CARD_POLL_TIMEOUT_MS (50u)
+#endif
+
+/**
  * @brief Antenna settling time in microseconds after switching Tx on.
  */
 #ifndef MFRC522_ANTENNA_SETTLE_US

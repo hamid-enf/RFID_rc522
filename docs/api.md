@@ -121,10 +121,15 @@ Card type derivation (best effort, SAK-based):
 MFRC522_Status_t MFRC522_REQA        (MFRC522_Handle_t *, uint8_t *atqa, uint32_t *atqa_len);
 MFRC522_Status_t MFRC522_WUPA        (MFRC522_Handle_t *, uint8_t *atqa, uint32_t *atqa_len);
 MFRC522_Status_t MFRC522_Anticollision(MFRC522_Handle_t *, uint8_t cascade, uint8_t *uid, uint32_t *uid_len, uint8_t *sak);
-MFRC522_Status_t MFRC522_SelectTag   (MFRC522_Handle_t *, const uint8_t *uid, uint32_t uid_len, uint8_t *sak);
+MFRC522_Status_t MFRC522_SelectCard  (MFRC522_Handle_t *, uint8_t *uid, uint32_t *uid_len, uint8_t *sak);
 MFRC522_Status_t MFRC522_HaltTag     (MFRC522_Handle_t *);
 MFRC522_Status_t MFRC522_TransceiveData(MFRC522_Handle_t *, const uint8_t *tx, uint32_t tx_len, uint8_t *rx, uint32_t *rx_len, uint32_t timeout_ms);
 ```
+- `REQA`/`WUPA` use the 7-bit short-frame format; `Anticollision` runs one
+  cascade level (`cascade` = 0/1/2 → SEL 0x93/0x95/0x97) and returns that
+  level's UID fragment + SAK (SAK bit 2 set ⇒ UID continues).
+- `SelectCard` resolves the complete UID (4/7/10 bytes) across all cascade
+  levels, handling cascade tags and BCC.
 - `Anticollision` reports `MFRC522_ERR_COLLISION` on a bit collision (caller
   may retry with the collision position from `CollReg`).
 - `TransceiveData` is the generic host-driven command path used by everything.

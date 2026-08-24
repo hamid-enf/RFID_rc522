@@ -499,3 +499,156 @@ MFRC522_Status_t MFRC522_PowerDown(MFRC522_Handle_t *handle)
     handle->state.flags &= (uint8_t)~MFRC522_FLAG_INITIALIZED;
     return MFRC522_OK;
 }
+
+/* ------------------------------------------------------------------ */
+/* Card detection / UID / card info                                   */
+/* ------------------------------------------------------------------ */
+
+/**
+ * @brief Derive a high-level card type from the SAK byte.
+ *
+ * Mapping follows NXP AN10833 "Coding of Select Acknowledge (SAK)". The
+ * 8th bit is ignored (ISO/IEC 14443 counts from LSB).
+ */
+static MFRC522_CardType_t mfrc522_card_type_from_sak(uint8_t sak)
+{
+    sak &= 0x7Fu;
+    switch (sak) {
+        case 0x09u: return MFRC522_CARD_MIFARE_MINI;
+        case 0x08u: return MFRC522_CARD_MIFARE_1K;
+        case 0x18u: return MFRC522_CARD_MIFARE_4K;
+        case 0x00u: return MFRC522_CARD_MIFARE_ULTRALIGHT;
+        case 0x20u:
+        case 0x24u: return MFRC522_CARD_ISO14443_4;
+        default:    return MFRC522_CARD_UNKNOWN;
+    }
+}
+
+MFRC522_Status_t MFRC522_IsCardPresent(MFRC522_Handle_t *handle)
+{
+    MFRC522_Status_t status;
+    uint8_t atqa[2];
+    uint32_t atqa_len = 2u;
+
+    if (handle == NULL) {
+        return MFRC522_ERR_INVALID_PARAM;
+    }
+
+    /* WUPA wakes IDLE and HALT cards; a short timeout keeps this snappy. */
+    status = mfrc522_reqa_or_wupa(handle, MFRC522_PICC_WUPA, atqa, &atqa_len,
+                                  MFRC522_CARD_POLL_TIMEOUT_MS);
+    if (status == MFRC522_OK) {
+        return MFRC522_OK;
+    }
+    if (status == MFRC522_ERR_COLLISION) {
+        return MFRC522_OK;   /* more than one card: definitely present */
+    }
+    if (status == MFRC522_ERR_TIMEOUT) {
+        return MFRC522_ERR_NO_CARD;
+    }
+    return status;
+}
+
+MFRC522_Status_t MFRC522_WaitForCard(MFRC522_Handle_t *handle,
+                                     uint32_t timeout_ms)
+{
+    MFRC522_Status_t status;
+    uint32_t deadline;
+    uint32_t now;
+
+    if (handle == NULL) {
+        return MFRC522_ERR_INVALID_PARAM;
+    }
+    if (timeout_ms == 0u) {
+        timeout_ms = handle->config.timeout_ms;
+    }
+
+    deadline = mfrc522_tick_ms(handle) + timeout_ms;
+    for (;;) {
+        status = MFRC522_IsCardPresent(handle);
+        if (status == MFRC522_OK) {
+            return MFRC522_OK;
+        }
+        if (status != MFRC522_ERR_NO_CARD) {
+            return status;
+        }
+
+        now = mfrc522_tick_ms(handle);
+        if ((int32_t)(deadline - now) <= 0) {
+            return MFRC522_ERR_TIMEOUT;
+        }
+        mfrc522_delay_ms(handle, 10u);
+    }
+}
+
+MFRC522_Status_t MFRC522_ReadUID(MFRC522_Handle_t *handle,
+                                 MFRC522_UID_t *uid)
+{
+    MFRC522_Status_t status;
+    uint8_t atqa[2];
+    uint32_t atqa_len = 2u;
+    uint32_t len = MFRC522_UID_MAX_LEN;
+    uint8_t sak = 0u;
+
+    if ((handle == NULL) || (uid == NULL)) {
+        return MFRC522_ERR_INVALID_PARAM;
+    }
+
+    mfrc522_lock(handle);
+
+    /* Bring the card to READY (best effort; an already-ready card simply
+     * does not answer WUPA, which is fine). */
+    (void)mfrc522_reqa_or_wupa(handle, MFRC522_PICC_WUPA, atqa, &atqa_len,
+                               MFRC522_CARD_POLL_TIMEOUT_MS);
+
+    status = mfrc522_select_full(handle, uid->bytes, &len, &sak);
+    mfrc522_unlock(handle);
+
+    if (status != MFRC522_OK) {
+        return status;
+    }
+
+    uid->length = (uint8_t)len;
+    uid->sak = sak;
+    return MFRC522_OK;
+}
+
+MFRC522_Status_t MFRC522_GetCardInfo(MFRC522_Handle_t *handle,
+                                     MFRC522_CardInfo_t *info)
+{
+    MFRC522_Status_t status;
+    uint8_t atqa[2];
+    uint32_t atqa_len = 2u;
+    uint32_t len = MFRC522_UID_MAX_LEN;
+    uint8_t sak = 0u;
+
+    if ((handle == NULL) || (info == NULL)) {
+        return MFRC522_ERR_INVALID_PARAM;
+    }
+
+    mfrc522_lock(handle);
+
+    /* WUPA first so ATQA is captured from a fresh (IDLE/HALT) card. */
+    status = mfrc522_reqa_or_wupa(handle, MFRC522_PICC_WUPA, atqa, &atqa_len,
+                                  handle->config.timeout_ms);
+    if (status != MFRC522_OK) {
+        mfrc522_unlock(handle);
+        if (status == MFRC522_ERR_TIMEOUT) {
+            return MFRC522_ERR_NO_CARD;
+        }
+        return status;
+    }
+
+    status = mfrc522_select_full(handle, info->uid, &len, &sak);
+    mfrc522_unlock(handle);
+    if (status != MFRC522_OK) {
+        return status;
+    }
+
+    info->atqa[0] = atqa[0];
+    info->atqa[1] = atqa[1];
+    info->uid_length = (uint8_t)len;
+    info->sak = sak;
+    info->type = mfrc522_card_type_from_sak(sak);
+    return MFRC522_OK;
+}
