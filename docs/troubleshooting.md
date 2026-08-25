@@ -91,6 +91,11 @@ fix the link first, then test cards.
 
 ### No card detected
 
+- **Check the card frequency first**: the MFRC522 only sees
+  **13.56 MHz ISO/IEC 14443-A** cards (MIFARE Classic, Ultralight, NTAG,
+  DESFire). **125 kHz** proximity cards (EM4100/iCode, Ti55xx, HID Prox)
+  are physically invisible to this chip — no software change can fix
+  that. They need a different reader (e.g. EM4193, PROXMF522, SC2731).
 - Confirm the antenna is on (`MFRC522_IsAntennaOn` == 1).
 - Move the card closer / center it over the antenna.
 - Check the antenna matching components on the module.

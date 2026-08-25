@@ -7,6 +7,20 @@ ISO/IEC 14443-3 / MIFARE specifications — not Arduino-library folklore.
 
 ---
 
+## Card frequency compatibility (read this first)
+
+The MFRC522 operates at **13.56 MHz** (HF) and only detects
+**ISO/IEC 14443-A** cards: MIFARE Classic (Mini/1K/4K), MIFARE Ultralight,
+NTAG, DESFire EV1.
+
+**125 kHz (LF) proximity cards are not detectable by this chip — at all.**
+EM4100 / iCode / Ti55xx / HID Prox family cards operate on a different
+physical frequency band; the MFRC522 antenna and demodulator cannot see
+them. No software or configuration change can close this gap — a different
+reader IC (e.g. EM4193, PROXMF522, SC2731) is required for 125 kHz cards.
+
+---
+
 ## Host interfaces
 
 | Interface | Support | Notes |
@@ -110,3 +124,6 @@ protocol (command + operand transfer) through the transceive primitive.
    high-level API; most applications do not need it.
 5. The **self-test** leaves the reader unusable until the registers are
    re-configured; `MFRC522_SelfTest()` re-initializes them automatically.
+6. **125 kHz proximity cards** (EM4100/iCode/Ti55xx/HID Prox) are outside
+   the silicon's frequency band and can never be detected — see
+   "Card frequency compatibility" above.
