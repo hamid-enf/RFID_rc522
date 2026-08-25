@@ -4,9 +4,19 @@
  *
  * Polls MFRC522_IsCardPresent() (a short, bounded check) and also shows
  * MFRC522_WaitForCard() (blocking until a card appears or the timeout
- * expires). When no card is seen, a raw REQA monitor reports the
- * chip-level outcome (IRQ bits + FIFO content) to separate "the card
- * answered but the driver mishandled it" from "no card answered at all".
+ * expires). When no card is seen, a command sweep probes the chip at the
+ * register level: it soft-resets the reader (bypassing the driver's init
+ * writes), tries every plausible CommandReg code with a REQA byte in the
+ * FIFO, and reports which code consumes the byte / starts a transceive.
+ *
+ * Field-verified triage (0xB2 clone silicon): the driver's transceive
+ * sequence left the REQA byte in the FIFO and raised only HiAlert — the
+ * command never executed. The sweep separates three worlds:
+ *   A. a different command code consumes the FIFO  -> clone command table
+ *   B. 0x0C consumes it after a plain reset        -> the driver's init
+ *      writes (NXP values) put this clone into a bad state
+ *   C. even 0x04 (Transmit, positive control) does not consume the FIFO
+ *      -> the chip cannot execute commands at all (power/oscillator)
  */
 
 #include "mfrc522_demo.h"
@@ -14,22 +24,16 @@
 MFRC522_Handle_t rfid = {0};
 
 /**
- * @brief One raw request through the chip: write the request byte (REQA or
- *        WUPA) into the FIFO, start the command, then report which ComIrq
- *        bits fire, how soon, and what lands in the FIFO.
- *
- * @param cmd_code  CommandReg value: 0x0C (datasheet Transceive) or 0x07
- *                  (the value this repo used before the fix — a no-op).
- * @param req_byte  0x26 (REQA: answers IDLE/READY cards) or
- *                  0x52 (WUPA: additionally wakes HALT'ed cards).
+ * @brief One raw probe: put `req_byte` in the FIFO, start `cmd_code` with
+ *        StartSend, wait up to 50 ms for Rx/Idle/Timer, then report the
+ *        FIFO (was the byte consumed?), ComIrq, Error, Status1/2 and the
+ *        CommandReg value.
  */
-static void demo_reqa_monitor_byte(uint8_t cmd_code, uint8_t req_byte)
+static void demo_probe_cmd(uint8_t cmd_code, uint8_t req_byte)
 {
-    uint8_t irq = 0u, level = 0u, val = 0u, i;
-    uint32_t t0, t_irq = 0u;
-
-    demo_printf("\n[monitor] CommandReg=0x%02X, byte=0x%02X\n",
-                cmd_code, req_byte);
+    uint8_t irq = 0u, level = 0u, val = 0u, err = 0u, s1 = 0u, s2 = 0u,
+           creg = 0u, i;
+    uint32_t t0;
 
     MFRC522_WriteRegister(&rfid, 0x01u, 0x00u);      /* Idle            */
     MFRC522_WriteRegister(&rfid, 0x04u, 0x7Fu);      /* clear ComIrq    */
@@ -40,54 +44,75 @@ static void demo_reqa_monitor_byte(uint8_t cmd_code, uint8_t req_byte)
     MFRC522_SetBits(&rfid, 0x0Cu, 0x80u);            /* StartSend       */
 
     t0 = HAL_GetTick();
-    while ((uint32_t)(HAL_GetTick() - t0) < 100u) {
+    while ((uint32_t)(HAL_GetTick() - t0) < 50u) {
         MFRC522_ReadRegister(&rfid, 0x04u, &irq);
-        irq = (uint8_t)(irq & 0x7Fu);
-        if (irq != 0u) {
-            t_irq = (uint32_t)(HAL_GetTick() - t0);
-            break;
+        if ((irq & 0x31u) != 0u) {
+            break;                                   /* Rx|Idle|Timer   */
         }
     }
-    if (irq == 0u) {
-        t_irq = 100u;   /* no IRQ within 100 ms */
-    }
-
-    MFRC522_WriteRegister(&rfid, 0x01u, 0x00u);      /* Idle            */
-    MFRC522_WriteRegister(&rfid, 0x04u, 0x7Fu);      /* clear ComIrq    */
 
     MFRC522_ReadRegister(&rfid, 0x0Au, &level);
     level = (uint8_t)(level & 0x7Fu);
-    demo_printf("[monitor] IRQ=0x%02X after %lu ms, FIFO=%u:",
-                irq, (unsigned long)t_irq, level);
+    MFRC522_ReadRegister(&rfid, 0x06u, &err);
+    MFRC522_ReadRegister(&rfid, 0x07u, &s1);
+    MFRC522_ReadRegister(&rfid, 0x08u, &s2);
+    MFRC522_ReadRegister(&rfid, 0x01u, &creg);
+    MFRC522_WriteRegister(&rfid, 0x01u, 0x00u);      /* Idle            */
+    MFRC522_WriteRegister(&rfid, 0x04u, 0x7Fu);      /* clear ComIrq    */
+
+    demo_printf("cmd=0x%02X: FIFO=%u %s IRQ=0x%02X Err=0x%02X S1=0x%02X "
+                "S2=0x%02X Cmd=0x%02X",
+                cmd_code, level, (level == 1u) ? "(NOT consumed)" : "",
+                (unsigned int)(irq & 0x7Fu), (unsigned int)err,
+                (unsigned int)s1, (unsigned int)s2, (unsigned int)creg);
     for (i = 0u; i < level && i < 8u; i++) {
         MFRC522_ReadRegister(&rfid, 0x09u, &val);
-        demo_printf(" 0x%02X", val);
+        demo_printf(" [0x%02X]", val);
     }
     demo_printf("\n");
 }
 
 /**
- * @brief Card not seen by the driver: probe the RF path directly.
+ * @brief Card not seen by the driver: sweep the CommandReg codes.
  *
- * Interpretation:
- *   - IRQ 0x30 (Rx+Idle) within a few ms + FIFO "0x04 0x00": a card
- *     ANSWERED the request (ATQA of a MIFARE card). If the driver still
- *     reports "no card", the linked library is stale — rebuild.
- *   - IRQ 0x01 (Timer) only, no RX: the command ran but no card answered
- *     -> RF side: card not in the field, wrong frequency, antenna
- *     matching, module power.
- *   - IRQ 0x00 (nothing for 100 ms): the command never ran -> the value
- *     written to CommandReg is not Transceive on this silicon.
+ * Runs a plain soft reset first (NOT the driver's full init — its NXP
+ * register writes may be exactly what puts this clone into a bad state).
+ * 0x04 (Transmit) is the positive control: it must consume the FIFO byte
+ * on any command-capable silicon.
  */
-static void demo_reqa_monitor(void)
+static void demo_cmd_sweep(void)
 {
-    demo_printf("\n=== REQA monitor: hold the card on the antenna ===\n");
-    demo_reqa_monitor_byte(0x0Cu, 0x26u);   /* Transceive + REQA   */
-    demo_reqa_monitor_byte(0x0Cu, 0x52u);   /* Transceive + WUPA   */
-    demo_reqa_monitor_byte(0x07u, 0x26u);   /* legacy 0x07 (no-op check) */
-    demo_printf("IRQ 0x30 + FIFO 0x04 0x00 = card answered (ATQA).\n");
-    demo_printf("IRQ 0x01 only              = command ran, no answer (RF).\n");
-    demo_printf("IRQ 0x00                   = command never ran.\n");
+    static const uint8_t cmds[] =
+        { 0x0Cu, 0x0Du, 0x0Eu, 0x0Bu, 0x0Au, 0x09u, 0x08u, 0x04u };
+    uint8_t i, w1c;
+
+    demo_printf("\n=== command sweep: hold the card on the antenna ===\n");
+
+    /* 1) ComIrq write-1-to-clear sanity check. */
+    MFRC522_WriteRegister(&rfid, 0x04u, 0x7Fu);
+    MFRC522_ReadRegister(&rfid, 0x04u, &w1c);
+    demo_printf("W1C check: ComIrq after clear = 0x%02X (expect 0x00)\n",
+                (unsigned int)w1c);
+
+    /* 2) Plain soft reset — clean state, no driver init writes. */
+    MFRC522_WriteRegister(&rfid, 0x01u, 0x0Fu);
+    HAL_Delay(50u);
+
+    /* 3) Try every plausible code; the real transceive consumes the FIFO
+     *    byte (FIFO != 1) and, with a card present, fills it with ATQA. */
+    for (i = 0u; i < (uint8_t)(sizeof(cmds) / sizeof(cmds[0])); i++) {
+        demo_probe_cmd(cmds[i], 0x26u);
+    }
+
+    /* 4) Re-probe 0x0C with the RF drivers switched on (the reset state
+     *    may have the antenna off). */
+    demo_printf("-- re-probe with antenna on --\n");
+    MFRC522_SetBits(&rfid, 0x14u, 0x03u);
+    demo_probe_cmd(0x0Cu, 0x26u);
+
+    demo_printf("FIFO=1 (NOT consumed) = the command never ran.\n");
+    demo_printf("FIFO=0                = command ran, no card answer.\n");
+    demo_printf("FIFO=2 [0x04][0x00]   = a card ANSWERED (ATQA)!\n");
 }
 
 int main(void)
@@ -139,9 +164,9 @@ int main(void)
         demo_printf("Wait timed out.\n");
     }
 
-    /* No card by the driver? Probe the RF path directly. */
+    /* No card by the driver? Sweep the command codes directly. */
     if (any_found == 0u) {
-        demo_reqa_monitor();
+        demo_cmd_sweep();
     }
 
     while (1) {
