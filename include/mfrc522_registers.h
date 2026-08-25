@@ -91,17 +91,20 @@ extern "C" {
 
 /* ================================================================== */
 /*  CommandReg (0x01) command codes                                   */
+/*  (NXP MFRC522 datasheet, "Command" table — command codes are the   */
+/*  5-bit values below, written into the CommandReg command field)    */
 /* ================================================================== */
-#define MFRC522_CMD_IDLE            (0x00u)  /**< No action / cancel current command. */
-#define MFRC522_CMD_MEM             (0x01u)  /**< Store 25 bytes into internal buffer. */
-#define MFRC522_CMD_GENERATE_RANDOM_ID (0x02u) /**< Generate a 10-byte random ID.  */
-#define MFRC522_CMD_CALC_CRC        (0x03u)  /**< Activate the CRC coprocessor.    */
-#define MFRC522_CMD_TRANSMIT        (0x04u)  /**< Transmit FIFO data.               */
-#define MFRC522_CMD_NO_CMD_CHANGE   (0x05u)  /**< Command not changed.              */
-#define MFRC522_CMD_RECEIVE         (0x06u)  /**< Activate the receiver.            */
-#define MFRC522_CMD_TRANSCEIVE      (0x07u)  /**< Transmit, then switch to receive. */
-#define MFRC522_CMD_MF_AUTHENT      (0x0Cu)  /**< MIFARE (Crypto1) authentication.  */
-#define MFRC522_CMD_SOFT_RESET      (0x0Fu)  /**< Soft reset.                       */
+#define MFRC522_CMD_IDLE            (0x00u)  /**< 0000: No action / cancel current command. */
+#define MFRC522_CMD_MEM             (0x01u)  /**< 0001: Store 25 bytes into internal buffer. */
+#define MFRC522_CMD_GENERATE_RANDOM_ID (0x02u) /**< 0010: Generate a 10-byte random ID.    */
+#define MFRC522_CMD_CALC_CRC        (0x03u)  /**< 0011: Activate the CRC coprocessor.      */
+#define MFRC522_CMD_TRANSMIT        (0x04u)  /**< 0100: Transmit FIFO data.                */
+#define MFRC522_CMD_NO_CMD_CHANGE   (0x07u)  /**< 0111: Command unchanged (e.g. modify the
+                                                 PowerDown bit without touching the command). */
+#define MFRC522_CMD_RECEIVE         (0x08u)  /**< 1000: Activate the receiver.             */
+#define MFRC522_CMD_TRANSCEIVE      (0x0Cu)  /**< 1100: Transmit, then switch to receive.  */
+#define MFRC522_CMD_MF_AUTHENT      (0x0Eu)  /**< 1110: MIFARE (Crypto1) authentication.   */
+#define MFRC522_CMD_SOFT_RESET      (0x0Fu)  /**< 1111: Soft reset.                       */
 
 /* ---- CommandReg control bits ------------------------------------- */
 #define MFRC522_COMMAND_POWER_DOWN  (0x10u)  /**< bit 4: soft power-down.           */

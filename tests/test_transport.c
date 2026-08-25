@@ -593,6 +593,53 @@ static void run_protocol_tests(void)
 }
 
 /* ================================================================== */
+/*  Datasheet value guards                                             */
+/* ================================================================== */
+
+/**
+ * @brief The mock in this file is self-consistent with the driver, so a
+ *        wrong command code or register address is never caught by the
+ *        behavioural tests (it "works" against the mock and silently
+ *        breaks real hardware). These checks pin the values to the NXP
+ *        MFRC522 datasheet (see docs/register_map.md) so a typo fails
+ *        the host test run.
+ */
+static void run_datasheet_value_tests(void)
+{
+    printf("== datasheet value guards ==\n");
+
+    /* CommandReg command codes (NXP "Command" table). */
+    CHECK(MFRC522_CMD_IDLE == 0x00u);
+    CHECK(MFRC522_CMD_MEM == 0x01u);
+    CHECK(MFRC522_CMD_GENERATE_RANDOM_ID == 0x02u);
+    CHECK(MFRC522_CMD_CALC_CRC == 0x03u);
+    CHECK(MFRC522_CMD_TRANSMIT == 0x04u);
+    CHECK(MFRC522_CMD_NO_CMD_CHANGE == 0x07u);
+    CHECK(MFRC522_CMD_RECEIVE == 0x08u);
+    CHECK(MFRC522_CMD_TRANSCEIVE == 0x0Cu);
+    CHECK(MFRC522_CMD_MF_AUTHENT == 0x0Eu);
+    CHECK(MFRC522_CMD_SOFT_RESET == 0x0Fu);
+
+    /* Key register addresses (NXP register overview). */
+    CHECK(MFRC522_REG_COMMAND == 0x01u);
+    CHECK(MFRC522_REG_COM_IRQ == 0x04u);
+    CHECK(MFRC522_REG_FIFO_DATA == 0x09u);
+    CHECK(MFRC522_REG_FIFO_LEVEL == 0x0Au);
+    CHECK(MFRC522_REG_CONTROL == 0x0Cu);
+    CHECK(MFRC522_REG_BIT_FRAMING == 0x0Du);
+    CHECK(MFRC522_REG_MODE == 0x11u);
+    CHECK(MFRC522_REG_TX_CONTROL == 0x14u);
+    CHECK(MFRC522_REG_TX_ASK == 0x15u);
+    CHECK(MFRC522_REG_SERIAL_SPEED == 0x1Fu);
+    CHECK(MFRC522_REG_CRC_RESULT_MSB == 0x21u);
+    CHECK(MFRC522_REG_CRC_RESULT_LSB == 0x22u);
+    CHECK(MFRC522_REG_MOD_WIDTH == 0x24u);
+    CHECK(MFRC522_REG_T_MODE == 0x2Au);
+    CHECK(MFRC522_REG_AUTO_TEST == 0x36u);
+    CHECK(MFRC522_REG_VERSION == 0x37u);
+}
+
+/* ================================================================== */
 /*  Version gate tests                                                 */
 /* ================================================================== */
 
@@ -847,6 +894,7 @@ int main(void)
     run_irq_test();
 #endif
 
+    run_datasheet_value_tests();
     run_protocol_tests();
     run_version_gate_tests();
     run_presence_regression_tests();

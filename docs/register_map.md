@@ -74,10 +74,10 @@ sheet (Rev. 3.9). This page is a quick cross-reference.
 | 0x02  | GenerateRandomID  | 10-byte random ID                |
 | 0x03  | CalcCRC           | CRC coprocessor                  |
 | 0x04  | Transmit          | Transmit FIFO content            |
-| 0x05  | NoCmdChange       | Command unchanged                |
-| 0x06  | Receive           | Activate receiver                |
-| 0x07  | Transceive        | Transmit then receive            |
-| 0x0C  | MFAuthent         | MIFARE Crypto1 authentication    |
+| 0x07  | NoCmdChange       | Command unchanged (PowerDown etc.)|
+| 0x08  | Receive           | Activate receiver                |
+| 0x0C  | Transceive        | Transmit then receive            |
+| 0x0E  | MFAuthent         | MIFARE Crypto1 authentication    |
 | 0x0F  | SoftReset         | Soft reset                       |
 
 ## Notes
