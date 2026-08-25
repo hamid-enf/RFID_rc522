@@ -176,6 +176,36 @@ MFRC522_Status_t mfrc522_reqa_or_wupa(MFRC522_Handle_t *h,
     return MFRC522_OK;
 }
 
+MFRC522_Status_t mfrc522_request_card(MFRC522_Handle_t *h,
+                                      uint8_t *atqa, uint32_t *atqa_len,
+                                      uint32_t timeout_ms)
+{
+    MFRC522_Status_t status;
+
+    if ((atqa == NULL) || (atqa_len == NULL) || (*atqa_len < 2u)) {
+        return MFRC522_ERR_INVALID_PARAM;
+    }
+
+    /* ISO/IEC 14443-3 type A request semantics:
+     *   - REQA (0x26) is answered by cards in the IDLE state and by cards
+     *     that are already selected (READY), where it acts as the RTSA
+     *     command. A READY card IGNORES WUPA.
+     *   - WUPA (0x52) additionally wakes cards in the HALT state.
+     * Sending REQA first keeps continuous polling of a non-halted card
+     * working; the WUPA fallback then also detects halted cards. */
+    status = mfrc522_reqa_or_wupa(h, MFRC522_PICC_REQA, atqa, atqa_len,
+                                  timeout_ms);
+    if (status == MFRC522_OK) {
+        return MFRC522_OK;
+    }
+    if (status != MFRC522_ERR_TIMEOUT) {
+        return status;   /* protocol / device error: a retry is pointless */
+    }
+
+    return mfrc522_reqa_or_wupa(h, MFRC522_PICC_WUPA, atqa, atqa_len,
+                                timeout_ms);
+}
+
 MFRC522_Status_t MFRC522_REQA(MFRC522_Handle_t *handle,
                               uint8_t *atqa, uint32_t *atqa_len)
 {

@@ -122,13 +122,17 @@ typedef enum MFRC522_SpiSpeed
 /* ================================================================== */
 
 /**
- * @brief Decoded VersionReg (0x30) content.
+ * @brief Decoded VersionReg (0x37) content.
+ *
+ * The register's high nibble marks the device family (0x9 = MFRC522,
+ * 0x8 = FM17522 clone); the silicon version lives in the low nibble
+ * (0x91 -> 1.0, 0x92 -> 2.0). `major` carries that version digit.
  */
 typedef struct MFRC522_Version
 {
     uint8_t raw;                 /**< Raw register value as read back.        */
-    uint8_t major;               /**< Major version digit (e.g. 2).           */
-    uint8_t minor;               /**< Minor version digit (e.g. 0).           */
+    uint8_t major;               /**< Silicon version (2 for v2.0, 1 for v1.0). */
+    uint8_t minor;               /**< Reserved, always 0.                     */
 } MFRC522_Version_t;
 
 /** @name Known VersionReg values (raw). */

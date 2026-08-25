@@ -52,5 +52,7 @@ to your own names via `#define` / `extern` in your project).
 
 - The demo key is the MIFARE Classic **factory default** (`FF FF FF FF FF FF`).
 - Examples 06/07/15 write to **block 4** (sector 1, safe with the factory
-  key). Never write the sector trailer (block 3/7/11/...) or the manufacturer
-  block (block 0) unless you know what you are doing.
+  key); example 08 writes to **blocks 4..6** (data blocks only —
+  `MFRC522_WriteSector` never touches the sector trailer). Never write the
+  sector trailer (block 3/7/11/...) or the manufacturer block (block 0)
+  unless you know what you are doing.

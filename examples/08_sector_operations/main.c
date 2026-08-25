@@ -63,6 +63,16 @@ int main(void)
                 demo_printf("ReadSector failed: %s\n", MFRC522_StatusToString(s));
             }
 
+            /* Write a pattern back to the data blocks only (the sector
+             * trailer is never written). */
+            for (i = 0u; i < (uint8_t)sizeof(buffer); i++) {
+                buffer[i] = (uint8_t)(0x22u + i);
+            }
+            s = MFRC522_WriteSector(&rfid, 1u, MFRC522_KEY_A, &DEMO_KEY,
+                                    uid.bytes, uid.length, buffer,
+                                    sizeof(buffer));
+            demo_printf("Write sector 1: %s\n", MFRC522_StatusToString(s));
+
             MFRC522_HaltTag(&rfid);
             HAL_Delay(500u);
         }

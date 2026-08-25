@@ -32,10 +32,23 @@ typedef enum {
 } GPIO_PinState;
 
 /* ---- Opaque peripheral handle types ------------------------------ */
-typedef struct { uint8_t _; } SPI_HandleTypeDef;
+/* Minimal SPI register view (status word) + HAL state, enough for the
+ * raw SPI probe in the examples. */
+typedef struct { volatile uint32_t SR; } SPI_TypeDef;
+typedef struct {
+    SPI_TypeDef *Instance;   /* SPIx register block.                    */
+    uint32_t     State;      /* HAL_StateTypeDef (1=READY, 2=BUSY, ...).*/
+} SPI_HandleTypeDef;
 typedef struct { uint8_t _; } I2C_HandleTypeDef;
 typedef struct { uint8_t _; } UART_HandleTypeDef;
 typedef struct { uint8_t _; } GPIO_TypeDef;
+
+/* ---- SPI error codes (subset of the STM32 HAL) -------------------- */
+#define SPI_ERROR_OVR    (0x0001u)
+#define SPI_ERROR_MODF   (0x0002u)
+#define SPI_ERROR_CRC    (0x0004u)
+#define SPI_ERROR_FRE    (0x0008u)
+#define SPI_ERROR_FRLFE  (0x0010u)
 
 /* ---- I2C memory-address size selector ---------------------------- */
 #define I2C_MEMADD_SIZE_8BIT (0x01u)
@@ -61,6 +74,8 @@ HAL_StatusTypeDef HAL_SPI_Transmit(SPI_HandleTypeDef *h, uint8_t *pData,
                                    uint16_t Size, uint32_t Timeout);
 HAL_StatusTypeDef HAL_SPI_Receive(SPI_HandleTypeDef *h, uint8_t *pData,
                                   uint16_t Size, uint32_t Timeout);
+
+uint32_t HAL_SPI_GetError(SPI_HandleTypeDef *h);
 
 HAL_StatusTypeDef HAL_I2C_Master_Transmit(I2C_HandleTypeDef *h, uint16_t DevAddress,
                                           uint8_t *pData, uint16_t Size,

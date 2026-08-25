@@ -20,6 +20,46 @@
   needs a bus-recovery (toggle SCL until SDA releases).
 - UART: framing noise; shorten wires, check ground.
 
+### Every register read fails, but the logic analyzer shows SCK/CS and MISO activity
+
+The MFRC522 is answering on the wire, yet `HAL_SPI_Transmit`/
+`HAL_SPI_Receive` return non-OK — the fault is in the STM32 SPI setup, not
+the module. Use the raw SPI probe from example 01 (it prints the HAL status
+codes) and check:
+
+- `tx`/`rx` = 3 (`HAL_TIMEOUT`): the transfer never completes. Verify the
+  SPI1 clock source in CubeMX (e.g. PLLP) and that `SPI_SR.BSY` is not stuck.
+- `tx`/`rx` = 1 (`HAL_ERROR`) with HAL error `0x01` (`OVR`): RX overrun — the
+  RX FIFO was not drained between transfers. Keep the SPI in full-duplex
+  2-line mode.
+- `tx`/`rx` = 2 (`HAL_BUSY`): the HAL handle is stuck after an earlier
+  error; call `HAL_SPI_Abort()` before retrying.
+- The raw probe succeeds (`value` = 0x92/0x91/0x88) while the driver fails:
+  the fault is in the driver's transfer sequence — report it with the full
+  console output.
+
+Run the probe twice: once right after `MX_SPI1_Init()` (clean state) and
+once after a failed `MFRC522_Init()`. If the first probe already fails, the
+SPI peripheral/clock configuration is wrong; if only the second fails, the
+init sequence is corrupting the SPI state.
+
+### HAL transfers succeed but the read values are wrong (e.g. 0x37 never reads 0x92)
+
+The SPI works, the MFRC522 answers, but the sampled data is not a healthy
+chip's data. Run the raw **canary scan** (example 01): it reads registers
+with fixed reset values directly through the HAL, bypassing the driver.
+
+- `0x0A` must read `0x40` (WaterLevel reset value). If it does, the data
+  path is healthy and the chip is simply a different/clone silicon whose
+  `VersionReg` is not 0x92/0x91/0x90/0x88 — report the raw 0x37 value so
+  it can be added to the accepted version list.
+- If **all** canary values are garbage, the data path is corrupt: slow the
+  SPI clock down (e.g. `SPI_BAUDRATEPRESCALER_128` or `_256`) and re-run.
+  Long MISO traces and weak pull-ups need slower clocks.
+
+Also do a full clean rebuild (Project -> Clean, then Build) when mixing
+hand-edited files with CubeMX-generated code, to rule out stale objects.
+
 ### `MFRC522_ERR_TIMEOUT` everywhere
 
 - The reader may be in soft power-down; call `MFRC522_WakeUp()`.
@@ -48,6 +88,16 @@
 - The anti-collision loop resolves collisions, but a weak antenna can cause
   REQA timeouts before collision detection engages. Present one card at a time
   where possible.
+
+### Card detected once, then never again (card stays in the field)
+
+- The card is in the **authenticated** state (post-MFAuthent): such a card
+  ignores REQA/WUPA until it leaves that state. Call `MFRC522_HaltTag()` and
+  re-poll, or wait for the card to be removed.
+- On older revisions `IsCardPresent` sent WUPA only, so it missed cards that
+  were already selected (READY). The driver now sends REQA first (which also
+  answers selected cards, as RTSA) and falls back to WUPA to wake HALT'ed
+  cards — see `docs/api.md` §4.
 
 ## MIFARE issues
 

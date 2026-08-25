@@ -60,7 +60,7 @@ protocol (command + operand transfer) through the transceive primitive.
 | Feature | Support |
 |---------|---------|
 | Hard reset (NRSTPD) / soft reset | ✅ |
-| Firmware version detection | ✅ (0x90/0x91/0x92, FM17522 0x88) |
+| Firmware version detection | ✅ (0x90/0x91/0x92, FM17522 0x88, clone 0xB2) |
 | Digital self-test (datasheet 16.1.1) | ✅ (exact NXP reference vectors) |
 | Antenna on/off | ✅ |
 | IRQ (Timer/Err/HiAlert/LoAlert/Idle/Rx/Tx) | ✅ dispatcher + callback |

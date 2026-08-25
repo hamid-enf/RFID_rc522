@@ -22,11 +22,19 @@
 /*  Mock device                                                       */
 /* ================================================================== */
 
-/* Card state machine (emulated ISO/IEC 14443-A PICC). */
+/* Card state machine (emulated ISO/IEC 14443-A PICC).
+ *
+ * Request semantics mirror real MIFARE cards:
+ *   - REQA (0x26): answered in IDLE (wake) and in ACTIVE (selected/READY,
+ *     where it acts as the RTSA command). Ignored in HALT and AUTH.
+ *   - WUPA (0x52): answered in IDLE (wake) and HALT (wake).
+ *     Ignored in ACTIVE and AUTH.
+ *   - MFAuthent moves an ACTIVE card to AUTH (it then ignores requests
+ *     until HALT'ed). */
 #define CARD_IDLE   0u
-#define CARD_READY  1u
-#define CARD_ACTIVE 2u
-#define CARD_HALT   3u
+#define CARD_ACTIVE 1u   /* selected / READY (answers MIFARE commands)      */
+#define CARD_HALT   2u
+#define CARD_AUTH   3u   /* Crypto1 active (post-MFAuthent)                 */
 
 typedef struct {
     uint8_t  reg[64];        /* register file                          */
@@ -41,6 +49,7 @@ typedef struct {
     uint8_t  card_sak;
     uint8_t  card_atqa[2];
     uint8_t  card_state;
+    uint8_t  card_present;    /* 0 = no card in the field at all         */
     uint8_t  card_blocks[8][MFRC522_BLOCK_SIZE]; /* a few blocks        */
     uint8_t  card_auth;      /* 1 = Crypto1 active                     */
     uint8_t  card_pending_write;      /* 1 = next frame is write data  */
@@ -73,6 +82,7 @@ static void mock_reset_all(mock_t *m)
     m->card_atqa[0] = 0x04u;
     m->card_atqa[1] = 0x00u;
     m->card_state  = CARD_IDLE;
+    m->card_present = 1u;
     m->card_auth   = 0u;
     /* Initialize block 4 with the classic demo pattern. */
     {
@@ -102,15 +112,24 @@ static void mock_handle_transceive(mock_t *m)
     if (n == 0u) {
         return;
     }
+    if (!m->card_present) {
+        /* No card in the field: nothing answers any command. */
+        m->reg[MFRC522_REG_COM_IRQ] |= MFRC522_IRQ_TIMER;
+        return;
+    }
     cmd = tx[0];
 
     if ((cmd == MFRC522_PICC_REQA) || (cmd == MFRC522_PICC_WUPA)) {
-        if ((cmd == MFRC522_PICC_REQA && m->card_state == CARD_IDLE) ||
-            (cmd == MFRC522_PICC_WUPA && (m->card_state == CARD_IDLE ||
-                                          m->card_state == CARD_HALT))) {
+        /* Real-hardware semantics: REQA answers IDLE (wake) and ACTIVE
+         * (selected/READY, as RTSA); WUPA answers IDLE (wake) and HALT
+         * (wake). An already-selected card ignores WUPA. */
+        if ((cmd == MFRC522_PICC_REQA &&
+             (m->card_state == CARD_IDLE || m->card_state == CARD_ACTIVE)) ||
+            (cmd == MFRC522_PICC_WUPA &&
+             (m->card_state == CARD_IDLE || m->card_state == CARD_HALT))) {
             mock_fifo_push(m, m->card_atqa[0]);
             mock_fifo_push(m, m->card_atqa[1]);
-            m->card_state = CARD_READY;
+            m->card_state = CARD_ACTIVE;
             m->reg[MFRC522_REG_COM_IRQ] |= (MFRC522_IRQ_RX | MFRC522_IRQ_IDLE);
         } else {
             m->reg[MFRC522_REG_COM_IRQ] |= MFRC522_IRQ_TIMER;  /* no answer */
@@ -119,7 +138,9 @@ static void mock_handle_transceive(mock_t *m)
     }
 
     if (cmd == MFRC522_PICC_HALT) {
-        m->card_state = CARD_HALT;
+        if ((m->card_state == CARD_ACTIVE) || (m->card_state == CARD_AUTH)) {
+            m->card_state = CARD_HALT;
+        }
         m->reg[MFRC522_REG_COM_IRQ] |= MFRC522_IRQ_TIMER;      /* no answer */
         return;
     }
@@ -245,6 +266,7 @@ static void mock_write_reg(mock_t *m, uint8_t addr, uint8_t val)
             mock_handle_transceive(m);
         } else if (val == MFRC522_CMD_MF_AUTHENT) {
             m->card_auth = 1u;
+            m->card_state = CARD_AUTH;   /* Crypto1 active: requests ignored */
             m->reg[MFRC522_REG_STATUS2] |= MFRC522_STATUS2_CRYPTO1_ON;
             m->reg[MFRC522_REG_COM_IRQ] |= MFRC522_IRQ_IDLE;
         }
@@ -440,12 +462,13 @@ static void run_transport_tests(MFRC522_TransportType_t type,
     CHECK(s == MFRC522_OK);
     CHECK((handle.state.flags & MFRC522_FLAG_INITIALIZED) != 0u);
 
-    /* Version detection. */
+    /* Version detection: 0x92 is silicon v2.0 (high nibble = device
+     * family, low nibble = version). */
     s = MFRC522_GetVersion(&handle, &version);
     CHECK(s == MFRC522_OK);
     CHECK(version.raw == 0x92u);
-    CHECK(version.major == 9u);
-    CHECK(version.minor == 2u);
+    CHECK(version.major == 2u);
+    CHECK(version.minor == 0u);
 
     /* Register round-trip. */
     s = MFRC522_WriteRegister(&handle, 0x25u, 0xA5u);
@@ -535,9 +558,9 @@ static void run_protocol_tests(void)
 
     CHECK(MFRC522_Init(&handle) == MFRC522_OK);
 
-    /* Card present (WUPA wakes the IDLE card). */
+    /* Card present (REQA wakes the IDLE card; the card is now selected). */
     CHECK(MFRC522_IsCardPresent(&handle) == MFRC522_OK);
-    CHECK(mock.card_state == CARD_READY);
+    CHECK(mock.card_state == CARD_ACTIVE);
 
     /* Read the UID (select leaves the card ACTIVE). */
     memset(&uid, 0, sizeof(uid));
@@ -564,9 +587,124 @@ static void run_protocol_tests(void)
     CHECK(info.uid[0] == 0xDEu && info.uid[3] == 0xEFu);
 
     /* No card in the field: IsCardPresent must report NO_CARD. */
-    mock.card_state = CARD_ACTIVE;   /* already selected => WUPA no answer */
-    /* (simulate an absent card by moving it to ACTIVE, so WUPA/REQA fail) */
+    mock.card_present = 0u;
     CHECK(MFRC522_IsCardPresent(&handle) == MFRC522_ERR_NO_CARD);
+    mock.card_present = 1u;
+}
+
+/* ================================================================== */
+/*  Version gate tests                                                 */
+/* ================================================================== */
+
+/**
+ * @brief MFRC522_Init must accept the NXP silicon versions and the known
+ *        compatible-clone revisions, and reject anything else.
+ */
+static void run_version_gate_tests(void)
+{
+    mock_t mock;
+    MFRC522_Handle_t handle;
+    static const uint8_t accepted[] =
+        { 0x90u, 0x91u, 0x92u, 0x88u, 0xB2u };
+    uint8_t i;
+
+    printf("== version gate ==\n");
+
+    for (i = 0u; i < (uint8_t)(sizeof(accepted) / sizeof(accepted[0])); i++) {
+        mock_reset_all(&mock);
+        mock.reg[MFRC522_REG_VERSION] = accepted[i];
+        memset(&handle, 0, sizeof(handle));
+        handle.transport.type = MFRC522_TRANSPORT_SPI;
+        handle.transport_ops = &MFRC522_SPI_TransportOps;
+        handle.platform.ops = &SPI_OPS;
+        handle.platform.ctx = &mock;
+        CHECK(MFRC522_Init(&handle) == MFRC522_OK);
+    }
+
+    /* Unknown version -> ERR_DEVICE. */
+    mock_reset_all(&mock);
+    mock.reg[MFRC522_REG_VERSION] = 0x00u;
+    memset(&handle, 0, sizeof(handle));
+    handle.transport.type = MFRC522_TRANSPORT_SPI;
+    handle.transport_ops = &MFRC522_SPI_TransportOps;
+    handle.platform.ops = &SPI_OPS;
+    handle.platform.ctx = &mock;
+    CHECK(MFRC522_Init(&handle) == MFRC522_ERR_DEVICE);
+}
+
+/* ================================================================== */
+/*  Presence / polling regression tests                                */
+/* ================================================================== */
+
+/**
+ * @brief Regression tests for the ISO/IEC 14443-A request semantics.
+ *
+ * These guard against the "WUPA-only polling" bug: a card in the READY
+ * (selected, not halted) state ignores WUPA, so presence detection must
+ * send REQA first and fall back to WUPA. Covers the flows of examples 02,
+ * 03, 04 and 15.
+ */
+static void run_presence_regression_tests(void)
+{
+    mock_t mock;
+    MFRC522_Handle_t handle;
+    MFRC522_UID_t uid;
+    MFRC522_CardInfo_t info;
+    MFRC522_Status_t s;
+
+    printf("== presence / polling (ISO 14443-A state machine) ==\n");
+
+    mock_reset_all(&mock);
+    memset(&handle, 0, sizeof(handle));
+    handle.transport.type = MFRC522_TRANSPORT_SPI;
+    handle.transport_ops = &MFRC522_SPI_TransportOps;
+    handle.platform.ops = &SPI_OPS;
+    handle.platform.ctx = &mock;
+
+    CHECK(MFRC522_Init(&handle) == MFRC522_OK);
+
+    /* IDLE card: detected, and now selected (READY). */
+    CHECK(MFRC522_IsCardPresent(&handle) == MFRC522_OK);
+    CHECK(mock.card_state == CARD_ACTIVE);
+
+    /* A selected, non-halted card must STILL be detected (REQA/RTSA;
+     * WUPA alone would report NO_CARD here). */
+    CHECK(MFRC522_IsCardPresent(&handle) == MFRC522_OK);
+
+    /* Example 02 flow: blocking wait right after a detection must
+     * succeed while the same card is in the field. */
+    CHECK(MFRC522_WaitForCard(&handle, 500u) == MFRC522_OK);
+
+    /* Example 04/15 flow: full card info after a UID read must work
+     * on the already-selected card. */
+    memset(&uid, 0, sizeof(uid));
+    CHECK(MFRC522_ReadUID(&handle, &uid) == MFRC522_OK);
+    memset(&info, 0, sizeof(info));
+    s = MFRC522_GetCardInfo(&handle, &info);
+    CHECK(s == MFRC522_OK);
+    CHECK(info.atqa[0] == 0x04u && info.atqa[1] == 0x00u);
+    CHECK(info.uid_length == 4u);
+    CHECK(info.sak == 0x08u);
+    CHECK(info.type == MFRC522_CARD_MIFARE_1K);
+    CHECK(info.uid[0] == 0xDEu && info.uid[3] == 0xEFu);
+
+    /* Halted card: REQA fails, the WUPA fallback wakes it again. */
+    CHECK(MFRC522_HaltTag(&handle) == MFRC522_OK);
+    CHECK(mock.card_state == CARD_HALT);
+    CHECK(MFRC522_IsCardPresent(&handle) == MFRC522_OK);
+    CHECK(mock.card_state == CARD_ACTIVE);
+
+    /* Documented limitation: an authenticated (post-MFAuthent) card
+     * ignores requests until it leaves that state. */
+    mock.card_state = CARD_AUTH;
+    CHECK(MFRC522_IsCardPresent(&handle) == MFRC522_ERR_NO_CARD);
+
+    /* No card at all in the field. */
+    mock.card_state = CARD_IDLE;
+    mock.card_present = 0u;
+    CHECK(MFRC522_IsCardPresent(&handle) == MFRC522_ERR_NO_CARD);
+    mock.card_present = 1u;
+    CHECK(MFRC522_IsCardPresent(&handle) == MFRC522_OK);
 }
 
 #if MFRC522_ENABLE_MIFARE
@@ -710,6 +848,8 @@ int main(void)
 #endif
 
     run_protocol_tests();
+    run_version_gate_tests();
+    run_presence_regression_tests();
 #if MFRC522_ENABLE_MIFARE
     run_mifare_tests();
 #endif

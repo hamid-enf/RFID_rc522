@@ -123,7 +123,7 @@ MFRC522_Status_t MFRC522_SoftReset(MFRC522_Handle_t *handle);
 MFRC522_Status_t MFRC522_HardReset(MFRC522_Handle_t *handle);
 
 /**
- * @brief Read and decode the VersionReg (0x30).
+ * @brief Read and decode the VersionReg (0x37).
  * @param version  Receives raw + decoded version.
  */
 MFRC522_Status_t MFRC522_GetVersion(MFRC522_Handle_t *handle,
@@ -172,13 +172,22 @@ uint8_t         MFRC522_IsAntennaOn(const MFRC522_Handle_t *handle);
 /* ================================================================== */
 
 /**
- * @brief Non-blocking presence check (REQA + short timeout).
+ * @brief Non-blocking presence check (REQA with WUPA fallback, short
+ *        timeout).
+ *
+ * Detects cards in the IDLE, READY (already selected) and HALT states.
+ * A card in the authenticated (post-MFAuthent) state does not answer a
+ * request and is therefore not reported until it leaves that state.
+ *
  * @return MFRC522_OK if a card answered, MFRC522_ERR_NO_CARD otherwise.
  */
 MFRC522_Status_t MFRC522_IsCardPresent(MFRC522_Handle_t *handle);
 
 /**
  * @brief Block until a card appears or the timeout expires.
+ *
+ * Polls with REQA (WUPA fallback), so it also succeeds when a card is
+ * already selected (READY) — not only when a fresh card enters the field.
  */
 MFRC522_Status_t MFRC522_WaitForCard(MFRC522_Handle_t *handle,
                                      uint32_t timeout_ms);
@@ -195,6 +204,10 @@ MFRC522_Status_t MFRC522_ReadUID(MFRC522_Handle_t *handle,
 
 /**
  * @brief Gather ATQA, SAK, UID and the derived card type.
+ *
+ * Works whether the card is fresh (IDLE/HALT) or already selected (READY):
+ * the initial request is REQA with a WUPA fallback, so calling this after
+ * MFRC522_IsCardPresent() / MFRC522_ReadUID() succeeds as well.
  */
 MFRC522_Status_t MFRC522_GetCardInfo(MFRC522_Handle_t *handle,
                                      MFRC522_CardInfo_t *info);

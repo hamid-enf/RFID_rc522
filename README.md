@@ -139,7 +139,8 @@ your CubeIDE project and use one of the [examples](examples/README.md).
   High-speed 3.4 Mbit/s), **serial UART** (up to 1228.8 kBd, LSB-first, 8N1).
 - I²C 7-bit address default **0x28** (all ADR pins + EA low).
 - 64-byte FIFO; hardware CRC/parity/framing; hardware Crypto1 (MFAuthent).
-- Version register default **0x92** (silicon v2.0).
+- Version register default **0x92** (silicon v2.0); compatible clones are
+  accepted too (**0x88** = FM17522, **0xB2** = field-verified clone).
 
 ---
 

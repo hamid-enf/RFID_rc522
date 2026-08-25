@@ -42,7 +42,11 @@ clear; hard reset pulses `NRSTPD` via the platform GPIO.
 ```c
 MFRC522_Status_t MFRC522_GetVersion(MFRC522_Handle_t *handle, MFRC522_Version_t *version);
 ```
-Reads `VersionReg` (0x30). Known raw values: `0x91` (v1.0), `0x92` (v2.0).
+Reads `VersionReg` (0x37). Accepted raw values: `0x90` (v0.0), `0x91` (v1.0),
+`0x92` (v2.0), `0x88` (FM17522 clone), `0xB2` (MFRC522-compatible clone
+revision, field-verified functional). For the NXP silicon the decoded
+`major` is the silicon version from the low nibble (`0x92` → 2.0,
+`0x91` → 1.0) and `minor` is 0; clone revisions are identified by `raw`.
 Anything else → `MFRC522_ERR_DEVICE`.
 
 ### `MFRC522_SelfTest`
@@ -88,10 +92,15 @@ uint8_t          MFRC522_IsAntennaOn(const MFRC522_Handle_t *handle);
 MFRC522_Status_t MFRC522_IsCardPresent(MFRC522_Handle_t *handle);
 MFRC522_Status_t MFRC522_WaitForCard(MFRC522_Handle_t *handle, uint32_t timeout_ms);
 ```
-- `IsCardPresent`: REQA with a short timeout; returns `MFRC522_OK` or
-  `MFRC522_ERR_NO_CARD`.
-- `WaitForCard`: blocks (polling REQA) until a card answers or `timeout_ms`
-  (0 → default) elapses.
+- `IsCardPresent`: REQA with a short timeout, WUPA as fallback; returns
+  `MFRC522_OK` or `MFRC522_ERR_NO_CARD`. REQA answers cards in the IDLE
+  state and cards that are already selected (READY, where it acts as RTSA);
+  the WUPA fallback additionally wakes HALT'ed cards. A card in the
+  authenticated (post-MFAuthent) state does not answer a request and is
+  therefore not reported until it leaves that state.
+- `WaitForCard`: blocks (polling REQA/WUPA) until a card answers or
+  `timeout_ms` (0 → default) elapses. It also succeeds when a card is
+  already selected — not only when a fresh card enters the field.
 
 ---
 
@@ -103,6 +112,8 @@ MFRC522_Status_t MFRC522_GetCardInfo(MFRC522_Handle_t *, MFRC522_CardInfo_t *inf
 ```
 - `ReadUID`: full cascade (up to 3 levels) → 4/7/10-byte UID + SAK.
 - `GetCardInfo`: also captures ATQA and derives the card type from SAK/ATQA.
+  Both send a request first (REQA, WUPA fallback), so they work whether the
+  card is fresh or already selected.
 
 Card type derivation (best effort, SAK-based):
 | SAK   | Type                       |

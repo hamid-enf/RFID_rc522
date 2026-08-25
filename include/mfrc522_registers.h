@@ -220,6 +220,9 @@ extern "C" {
 #define MFRC522_VERSION_V1_0         (0x91u)
 #define MFRC522_VERSION_V0_0         (0x90u)
 #define MFRC522_VERSION_FM17522      (0x88u) /**< Fudan FM17522 clone.              */
+#define MFRC522_VERSION_B2           (0xB2u) /**< MFRC522-compatible clone silicon
+                                                 reporting 0xB2 (field-verified
+                                                 functional).                    */
 
 #ifdef __cplusplus
 }

@@ -250,8 +250,11 @@ MFRC522_Status_t MFRC522_GetVersion(MFRC522_Handle_t *handle,
     }
 
     version->raw   = raw;
-    version->major = (uint8_t)((raw >> 4) & 0x0Fu);
-    version->minor = (uint8_t)(raw & 0x0Fu);
+    /* VersionReg layout: the high nibble marks the device family
+     * (0x9 = MFRC522, 0x8 = FM17522 clone); the low nibble is the silicon
+     * version (0x91 -> 1.0, 0x92 -> 2.0). */
+    version->major = (uint8_t)(raw & 0x0Fu);
+    version->minor = 0u;
     return MFRC522_OK;
 }
 
@@ -341,6 +344,7 @@ MFRC522_Status_t MFRC522_Init(MFRC522_Handle_t *handle)
         case MFRC522_VERSION_V1_0:
         case MFRC522_VERSION_V2_0:
         case MFRC522_VERSION_FM17522:
+        case MFRC522_VERSION_B2:
             break;
         default:
             handle->state.last_error = MFRC522_ERR_DEVICE;
@@ -552,8 +556,10 @@ MFRC522_Status_t MFRC522_IsCardPresent(MFRC522_Handle_t *handle)
         return MFRC522_ERR_INVALID_PARAM;
     }
 
-    /* WUPA wakes IDLE and HALT cards; a short timeout keeps this snappy. */
-    status = mfrc522_reqa_or_wupa(handle, MFRC522_PICC_WUPA, atqa, &atqa_len,
+    /* REQA detects IDLE cards and already-selected (READY) cards; the WUPA
+     * fallback additionally wakes HALT'ed cards. A short timeout keeps this
+     * check snappy. */
+    status = mfrc522_request_card(handle, atqa, &atqa_len,
                                   MFRC522_CARD_POLL_TIMEOUT_MS);
     if (status == MFRC522_OK) {
         return MFRC522_OK;
@@ -646,8 +652,10 @@ MFRC522_Status_t MFRC522_GetCardInfo(MFRC522_Handle_t *handle,
 
     mfrc522_lock(handle);
 
-    /* WUPA first so ATQA is captured from a fresh (IDLE/HALT) card. */
-    status = mfrc522_reqa_or_wupa(handle, MFRC522_PICC_WUPA, atqa, &atqa_len,
+    /* Request the card so the ATQA is captured: REQA answers IDLE and
+     * already-selected (READY) cards, the WUPA fallback wakes HALT'ed
+     * cards. */
+    status = mfrc522_request_card(handle, atqa, &atqa_len,
                                   handle->config.timeout_ms);
     if (status != MFRC522_OK) {
         mfrc522_unlock(handle);

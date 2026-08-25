@@ -139,6 +139,19 @@ MFRC522_Status_t mfrc522_reqa_or_wupa(MFRC522_Handle_t *h,
                                       uint8_t *atqa, uint32_t *atqa_len,
                                       uint32_t timeout_ms);
 
+/**
+ * @brief Two-step card request: REQA first (answers IDLE and already-selected
+ *        READY cards), WUPA as fallback (wakes HALT'ed cards).
+ *
+ * Covers every card state that can answer a request; see
+ * mfrc522_request_card() in mfrc522_protocol.c for the ISO 14443-3
+ * rationale. Returns MFRC522_OK with the ATQA if any request was answered,
+ * MFRC522_ERR_TIMEOUT if nothing answered.
+ */
+MFRC522_Status_t mfrc522_request_card(MFRC522_Handle_t *h,
+                                      uint8_t *atqa, uint32_t *atqa_len,
+                                      uint32_t timeout_ms);
+
 #ifdef __cplusplus
 }
 #endif

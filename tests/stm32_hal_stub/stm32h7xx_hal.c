@@ -21,6 +21,9 @@ HAL_StatusTypeDef HAL_SPI_Receive(SPI_HandleTypeDef *h, uint8_t *pData,
                                   uint16_t Size, uint32_t Timeout)
 { (void)h; (void)pData; (void)Size; (void)Timeout; return HAL_OK; }
 
+uint32_t HAL_SPI_GetError(SPI_HandleTypeDef *h)
+{ (void)h; return 0u; }
+
 HAL_StatusTypeDef HAL_I2C_Master_Transmit(I2C_HandleTypeDef *h, uint16_t a,
                                           uint8_t *pData, uint16_t Size, uint32_t t)
 { (void)h; (void)a; (void)pData; (void)Size; (void)t; return HAL_OK; }
