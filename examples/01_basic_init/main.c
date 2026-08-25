@@ -47,18 +47,21 @@ static void demo_hw_diag(void)
 }
 
 /**
- * @brief Raw SPI probe: one manual VersionReg (0x37) read around the HAL
- *        calls, printing the exact HAL status codes.
+ * @brief Raw SPI probe: read VersionReg (0x37) five times around the HAL
+ *        calls, printing the exact HAL status codes and every read value.
  *
- * Interpretation (tx/rx: 0=OK, 1=ERROR, 2=BUSY, 3=TIMEOUT):
- *   - tx or rx = 3 (TIMEOUT): the SPI transfer never completes -> check the
- *     SPI1 clock source / BSY flag.
- *   - tx or rx = 1 (ERROR) with HAL error = 1 (OVR): RX overrun -> the RX
- *     FIFO is not being drained (see notes in docs/troubleshooting.md).
- *   - tx or rx = 2 (BUSY): the HAL handle is stuck -> something corrupted
- *     the SPI state before this point.
- *   - tx = rx = 0 and value = 0x92/0x91/0x88: the raw SPI works; the failure
- *     comes from the driver's transfer sequence, report it upstream.
+ * VersionReg is a read-only silicon register: a healthy link returns the
+ * SAME value on every read. Different values between reads (e.g. 0xB2 and
+ * 0xF6) mean MISO data is intermittently corrupt — slow the SPI clock
+ * (prescaler 128/256) and check MISO routing/pull-up and module power.
+ *
+ * Interpretation of the transfer status (tx/rx: 0=OK, 1=ERROR, 2=BUSY,
+ * 3=TIMEOUT):
+ *   - 3 (TIMEOUT): the transfer never completes -> check the SPI1 clock
+ *     source / BSY flag.
+ *   - 1 (ERROR) with HAL error = 1 (OVR): RX overrun -> the RX FIFO is not
+ *     being drained.
+ *   - 2 (BUSY): the HAL handle is stuck after an earlier error.
  *
  * Run it TWICE to localize the fault: once right after MX_SPI1_Init()
  * (clean state) and once after a failed MFRC522_Init().
@@ -67,23 +70,29 @@ static void demo_spi_raw_probe(void)
 {
     uint8_t addr = (uint8_t)((0x37u << 1) | 0x80u);
     uint8_t value = 0u;
+    uint8_t i;
     HAL_StatusTypeDef s_tx, s_rx;
 
-    demo_printf("\n--- raw SPI probe (VersionReg 0x37) ---\n");
+    demo_printf("\n--- raw SPI probe (VersionReg 0x37 x5) ---\n");
     demo_printf("SPI State before: %u\n", (unsigned int)hspi1.State);
 
-    HAL_GPIO_WritePin(RFID_CS_GPIO_Port, RFID_CS_Pin, GPIO_PIN_RESET);
-    HAL_Delay(1u);
-    s_tx = HAL_SPI_Transmit(&hspi1, &addr, 1u, 100u);
-    s_rx = HAL_SPI_Receive(&hspi1, &value, 1u, 100u);
-    HAL_GPIO_WritePin(RFID_CS_GPIO_Port, RFID_CS_Pin, GPIO_PIN_SET);
+    for (i = 0u; i < 5u; i++) {
+        HAL_GPIO_WritePin(RFID_CS_GPIO_Port, RFID_CS_Pin, GPIO_PIN_RESET);
+        HAL_Delay(1u);
+        s_tx = HAL_SPI_Transmit(&hspi1, &addr, 1u, 100u);
+        s_rx = HAL_SPI_Receive(&hspi1, &value, 1u, 100u);
+        HAL_GPIO_WritePin(RFID_CS_GPIO_Port, RFID_CS_Pin, GPIO_PIN_SET);
 
-    demo_printf("tx=%u rx=%u value=0x%02X\n",
-                (unsigned int)s_tx, (unsigned int)s_rx, value);
+        demo_printf("  read %u: tx=%u rx=%u -> 0x%02X\n",
+                    (unsigned int)i, (unsigned int)s_tx,
+                    (unsigned int)s_rx, value);
+    }
+
     demo_printf("SPI_SR=0x%08lX\n", (unsigned long)hspi1.Instance->SR);
     demo_printf("HAL error=0x%02X (1=OVR 2=MODF 4=CRC 8=FRE)\n",
                 (unsigned int)HAL_SPI_GetError(&hspi1));
     demo_printf("SPI State after: %u\n", (unsigned int)hspi1.State);
+    demo_printf("All 5 reads must be identical (e.g. 0x92 or 0xB2).\n");
     demo_printf("---- end of probe ----\n");
 }
 

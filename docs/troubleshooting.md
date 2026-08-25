@@ -49,16 +49,35 @@ The SPI works, the MFRC522 answers, but the sampled data is not a healthy
 chip's data. Run the raw **canary scan** (example 01): it reads registers
 with fixed reset values directly through the HAL, bypassing the driver.
 
-- `0x0A` must read `0x40` (WaterLevel reset value). If it does, the data
+- `0x0B` must read `0x40` (WaterLevel reset value). If it does, the data
   path is healthy and the chip is simply a different/clone silicon whose
-  `VersionReg` is not 0x92/0x91/0x90/0x88 — report the raw 0x37 value so
-  it can be added to the accepted version list.
+  `VersionReg` is not one of the accepted values (0x92/0x91/0x90/0x88/0xB2)
+  — report the raw 0x37 value so it can be added to the accepted list.
 - If **all** canary values are garbage, the data path is corrupt: slow the
   SPI clock down (e.g. `SPI_BAUDRATEPRESCALER_128` or `_256`) and re-run.
   Long MISO traces and weak pull-ups need slower clocks.
 
 Also do a full clean rebuild (Project -> Clean, then Build) when mixing
 hand-edited files with CubeMX-generated code, to rule out stale objects.
+
+### The same register reads different values on different boots/runs
+
+VersionReg is a read-only silicon register — it must return the same value
+on every read. If the probe (or the printed firmware version) shows e.g.
+`0xF6`, `0xB2`, `0xF6` across reboots, the MISO data is intermittently
+corrupt: the MCU samples a bit while the line is still transitioning
+(setup/hold margin exhausted) or the line rings.
+
+- Slow the SPI clock: `BaudRatePrescaler` 32 -> 128 (or 256) and re-run.
+  The probe reads the version five times; all five must be identical.
+- Shorten the MISO trace / add a pull-up near the MFRC522 (many modules
+  have one on board; wire-wrapped or breadboard links often do not).
+- Add a 10-100 uF bulk capacitor on the module VCC-GND: supply droop
+  during SPI bursts changes edge timing and causes the same symptom.
+
+Note: intermittent MISO corruption also breaks card detection, because
+REQA/anti-collision traffic is moved through the SPI register/FIFO path —
+fix the link first, then test cards.
 
 ### `MFRC522_ERR_TIMEOUT` everywhere
 
